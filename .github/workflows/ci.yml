@@ -29,9 +29,12 @@ jobs:
           python -m pip install --upgrade pip
           # Core deps only — the splice engines aren't needed for the pure-python
           # scoring/variants tests, and skipping them keeps CI fast.
-          # Use numpy-2-compatible minimums for pandas/matplotlib/biopython.
-          pip install "pandas>=2.2.2" "matplotlib>=3.9" "biopython>=1.84" \
-                      pytest pytest-cov ruff
+          # numpy<2 pinned to avoid a GH-Actions-specific numpy 2.x toolcache
+          # vs pip-install conflict (see: hosted Python tool-cache pre-installs
+          # numpy 2 in a way that collides with freshly-pip-installed pandas).
+          # The package itself is numpy-2 compatible — this constraint is CI-only.
+          pip install "numpy<2" "pandas>=2.2.2" "matplotlib>=3.9" \
+                      "biopython>=1.84" pytest pytest-cov ruff
 
       - name: Install oncosplice (no engine extras, no geney/seqmat)
         run: pip install -e . --no-deps
