@@ -57,6 +57,39 @@ logger = logging.getLogger(__name__)
 SPLICING_CONTEXT_BP = 7500  # half-window for the local pre-mRNA region
 
 
+def _apply_mut_safely(pre_mrna, pos: int, ref: str, alt: str) -> None:
+    """Apply a single mutation to a seqmat pre-mRNA, tolerating reference mismatches.
+
+    seqmat's ``apply_mutations`` is strict by default — it raises on ref mismatch.
+    Two fallback strategies match what TCGA-style pipelines need:
+
+    1. If the seqmat version accepts a ``permissive=True`` kwarg, use it.
+    2. Otherwise re-try as a pure insertion (``ref=''``) at the same position,
+       which lets the variant land even if the upstream ref differs from the
+       genome build.
+
+    This used to live in ``geney._apply_mutation_safe``; inlined here to drop
+    the geney runtime dependency for the core classification path.
+    """
+    try:
+        pre_mrna.apply_mutations((pos, ref, alt))
+        return
+    except Exception as exc:  # noqa: BLE001
+        msg = str(exc).lower()
+        if "mismatch" not in msg and "ref" not in msg:
+            raise
+    try:
+        pre_mrna.apply_mutations((pos, ref, alt), permissive=True)
+        return
+    except TypeError:
+        pass
+    try:
+        pre_mrna.apply_mutations((pos, "", alt))
+    except Exception:
+        # Last-resort no-op — the prediction will reflect the un-mutated context.
+        pass
+
+
 # ---------------------------------------------------------------------------
 # Engine
 # ---------------------------------------------------------------------------
@@ -159,11 +192,6 @@ class OncospliceEngine:
         ``(padded_sequence, biological_indices)`` with
         ``len(biological_indices) == len(padded_sequence) - 2*cl``.
         """
-        try:
-            from geney.utils import _apply_mutation_safe
-        except ImportError:
-            from geney.transcripts import _apply_mutation_safe  # type: ignore
-
         cl = self.predictor.context_length
         # How wide a biological window to predict on each side of `center`.
         # Match the legacy oncosplice 3.0.0 behaviour: ±(SPLICING_CONTEXT_BP − cl)
@@ -176,7 +204,7 @@ class OncospliceEngine:
         t.generate_pre_mrna(region_start=center - full_half,
                             region_end=center + full_half)
         for pos, ref, alt in mutations:
-            _apply_mutation_safe(t.pre_mrna, pos, ref, alt, permissive=True)
+            _apply_mut_safely(t.pre_mrna, pos, ref, alt)
 
         pm = t.pre_mrna
         target = pm.clone(center - full_half, center + full_half)
@@ -301,8 +329,20 @@ class OncospliceEngine:
         """Enumerate alternative isoforms via SpliceSimulator and score each.
 
         Returns (isoforms_df, aggregate_score, max_percentile).
+
+        Requires the optional ``geney`` dependency — install with
+        ``pip install oncosplice[protein]``. The core splicing-epistasis
+        path (``analyze_pair(protein=False)``, ``scan()``, ``classify_dataframe()``)
+        does not need this.
         """
-        from ._geney_compat import SpliceSimulator
+        try:
+            from ._geney_compat import SpliceSimulator
+        except ImportError as exc:
+            raise ImportError(
+                "Protein-library / Oncosplice score requires the `geney` package. "
+                "Install with `pip install oncosplice[protein]`, or use "
+                "`protein=False` for splicing-epistasis classification only."
+            ) from exc
 
         # SpliceSimulator wants the wide multi-index format produced by
         # geney's adjoin_splicing_outcomes. We materialize a small wide

@@ -29,9 +29,12 @@ pip install -e .[openspliceai]  # OpenSpliceAI alone
 pip install -e .[spliceai_pytorch]  # original SpliceAI weights, PyTorch architecture
 pip install -e .[pangolin]      # Pangolin
 pip install -e .[spliceformer]  # Spliceformer 40k transformer
+pip install -e .[protein]       # add the protein-library / Oncosplice score path
 ```
 
-Core requires: `geney`, `seqmat`, `numpy`, `pandas`, `matplotlib`, `biopython`. The package preserves your env if installed with `--no-deps`.
+Core requires: `numpy`, `pandas`, `matplotlib`, `biopython`, `seqmat`. The package preserves your env if installed with `--no-deps`.
+
+The classification core (`analyze_pair`, `scan`, `classify_dataframe`) has **no `geney` dependency** as of 3.2.0 — `geney` is needed only for the protein-library / Oncosplice protein-divergence score path (`[protein]` extra).
 
 ## Quickstart
 

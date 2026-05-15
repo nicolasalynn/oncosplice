@@ -1,67 +1,91 @@
-"""Internal compatibility shim — geney has two coexisting layouts in the wild.
+"""Internal compatibility shim for the optional ``geney`` dependency.
 
-The legacy installed wheel uses a flat layout (``geney/pipelines.py``,
-``geney/transcripts.py``, …) while the modular development checkout uses a
-package layout (``geney/pipelines/__init__.py``, ``geney/splicing/__init__.py``,
-…).  This module imports the symbols we need from whichever layout is active,
-so the rest of oncosplice doesn't have to care.
+Most of oncosplice — single-/pair-/N-variant classification, ``scan()``,
+``classify_dataframe()`` — runs without ``geney``. Only the protein-library
+(alternative-isoform enumeration + Oncosplice protein-divergence score) path
+requires geney. This module gates the geney-only symbols so the rest of the
+package imports cleanly even when geney is absent.
+
+What's still re-exported here:
+
+- ``Mutation``, ``MutationalEvent``  — variant event objects (only used by
+  ``Variant.to_event()`` / the legacy DataFrame conversion helpers).
+- ``SpliceSimulator``, ``TranscriptLibrary``, ``Oncosplice`` — protein-library
+  machinery, lazily-imported by ``OncospliceEngine._score_isoforms``.
+
+``select_transcript`` is implemented locally (no geney dependency) because the
+geney version has a bug in its fallback path that drops ~10% of genes whose
+primary isoform doesn't contain the variant position.
 """
 from __future__ import annotations
 
-# ----- MutationalEvent / Mutation ---------------------------------------------
-try:
-    from geney.variants import Mutation, MutationalEvent  # both layouts
-except ImportError as e:  # pragma: no cover
-    raise ImportError(
-        "geney.variants is required (install geney from the modular or "
-        "flat-layout package)."
-    ) from e
 
-# ----- Oncosplice protein-divergence class -----------------------------------
+def _missing(name: str):
+    """Return a placeholder that raises if accessed at runtime."""
+    class _MissingGeney:
+        def __init__(self, *a, **kw):
+            raise ImportError(
+                f"`{name}` requires the optional `geney` package. "
+                "Install with `pip install oncosplice[protein]`."
+            )
+    _MissingGeney.__name__ = name
+    return _MissingGeney
+
+
+# ----- Variant event objects (geney.variants) ---------------------------------
 try:
-    from geney.oncosplice import Oncosplice  # modular layout (re-exports)
+    from geney.variants import Mutation, MutationalEvent
+except ImportError:
+    Mutation = _missing("Mutation")
+    MutationalEvent = _missing("MutationalEvent")
+
+# ----- Oncosplice protein-divergence class ------------------------------------
+try:
+    from geney.oncosplice import Oncosplice
 except ImportError:
     try:
-        from geney.oncosplice.scoring import Oncosplice  # alt path
+        from geney.oncosplice.scoring import Oncosplice
     except ImportError:
-        from geney.oncosplice import Oncosplice  # flat layout single-file
+        Oncosplice = _missing("Oncosplice")
 
 # ----- TranscriptLibrary + SpliceSimulator ------------------------------------
 try:
     from geney.splicing import SpliceSimulator, TranscriptLibrary
-except ImportError:  # flat layout
-    from geney.splice_graph import SpliceSimulator  # type: ignore
-    from geney.transcripts import TranscriptLibrary  # type: ignore
-
-# ----- splice-engine setters --------------------------------------------------
-try:
-    from geney.splicing.engines import set_splicing_device  # modular
-except ImportError:  # flat: function may live in geney.engines
+except ImportError:
     try:
-        from geney.engines import set_splicing_device  # type: ignore
+        from geney.transcripts import TranscriptLibrary
+        from geney.splice_graph import SpliceSimulator
     except ImportError:
-        def set_splicing_device(device):  # type: ignore
-            """No-op fallback when the installed geney version doesn't expose
-            a device-setter."""
+        TranscriptLibrary = _missing("TranscriptLibrary")
+        SpliceSimulator = _missing("SpliceSimulator")
+
+# ----- splice-engine device setter -------------------------------------------
+try:
+    from geney.splicing.engines import set_splicing_device
+except ImportError:
+    try:
+        from geney.engines import set_splicing_device
+    except ImportError:
+        def set_splicing_device(device):
+            """No-op when geney isn't installed."""
             return None
 
-# ----- select_transcript -----------------------------------------------------
-# The geney implementation has a bug: its step-3 fallback iterates raw dict
+
+# ─── select_transcript (LOCAL implementation, no geney needed) ───────────────
+# geney's own implementation has a bug — its step-3 fallback iterates raw dict
 # entries from ``gene.transcripts`` instead of materialised Transcript objects,
 # so the bounds-containment check raises AttributeError on every alternative
-# isoform and the function silently returns None. That dropped major genes like
-# ABL1/ABL2 (variant outside the primary isoform's bounds but inside other
-# isoforms) and projected to ~80K lost TCGA pairs. We override with a correct,
-# self-contained implementation: check primary first, then every transcript by
-# its ``transcript_start``/``transcript_end`` bounds.
+# isoform and the function silently returns None. That drops major genes like
+# ABL1/ABL2 (variant outside primary isoform's bounds but inside others).
+# We override with a correct, self-contained implementation.
 
 def select_transcript(gene, position: int, preferred_transcript_id=None):
-    """Return any transcript of ``gene`` whose genomic bounds contain ``position``.
+    """Return a transcript of ``gene`` whose genomic bounds contain ``position``.
 
     Order tried: (1) ``preferred_transcript_id`` if given, (2) ``primary_transcript``,
-    (3) every other transcript in ``gene.transcripts``. Pre-mRNA windows are
-    used for splicing prediction so intronic positions are valid — we only need
-    a transcript that *spans* the variant, not one whose exons contain it.
+    (3) every other transcript. Pre-mRNA windows are used for splicing prediction
+    so intronic positions are valid — we only need a transcript that *spans* the
+    variant, not one whose exons contain it.
     """
     def _bounds(t):
         s = getattr(t, "transcript_start", None)
@@ -74,7 +98,6 @@ def select_transcript(gene, position: int, preferred_transcript_id=None):
         b = _bounds(t)
         return b is not None and b[0] <= pos <= b[1]
 
-    # (1) explicit preference
     if preferred_transcript_id:
         try:
             t = gene.transcript(preferred_transcript_id)
@@ -83,7 +106,6 @@ def select_transcript(gene, position: int, preferred_transcript_id=None):
         except Exception:
             pass
 
-    # (2) primary / MANE transcript
     try:
         prim_id = getattr(gene, "primary_transcript", None)
         if prim_id:
@@ -93,10 +115,8 @@ def select_transcript(gene, position: int, preferred_transcript_id=None):
     except Exception:
         pass
 
-    # (3) sweep every transcript by ID — materialise each via ``gene.transcript(tid)``
     try:
-        tids = list(getattr(gene, "transcripts", {}))
-        for tid in tids:
+        for tid in list(getattr(gene, "transcripts", {})):
             try:
                 t = gene.transcript(tid)
             except Exception:
@@ -107,6 +127,7 @@ def select_transcript(gene, position: int, preferred_transcript_id=None):
         pass
 
     return None
+
 
 __all__ = [
     "Mutation", "MutationalEvent",

@@ -29,6 +29,12 @@
 - `scan(constructs, ..., singles_checkpoint_path=...)` — optional per-single CSV path.
 - `splicing_outcome_fingerprint()` + `splicing_outcome_hash()` for grouping events by gross splicing-impact pattern (logit-style discretization).
 
+### Dependency simplification
+
+- **`geney` is now optional.** The classification core (`analyze_pair`, `scan`, `classify_dataframe`) runs with only `numpy`, `pandas`, `matplotlib`, `biopython`, `seqmat`. The protein-library / Oncosplice protein-divergence path moves to the new `[protein]` extra (`pip install oncosplice[protein]`).
+- `_apply_mutation_safe` inlined from geney (small helper that tolerates ref/alt mismatches on top of seqmat's `apply_mutations`).
+- `select_transcript` is now a local implementation in `_geney_compat.py` — geney's own version had a bug that silently dropped ~10% of genes.
+
 ### Tooling
 
 - GitHub Actions CI on Python 3.10 / 3.11 / 3.12.

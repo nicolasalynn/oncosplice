@@ -21,9 +21,6 @@ dependencies = [
   "pandas>=2.0",
   "matplotlib>=3.7",
   "biopython>=1.81",
-  # Lower bounds chosen to match the user's currently-working environment.
-  # NEVER reinstall this package without --no-deps unless these are still satisfied.
-  "geney>=2.0",
   "seqmat>=1.3",
 ]
 
@@ -33,20 +30,22 @@ dependencies = [
 # The spliceai_keras extra is kept ONLY as the reference implementation for
 # verification of the Keras→PyTorch translation.
 [project.optional-dependencies]
+# ── Splice-site engine backends (pick the one you want, or `all`) ────────────
 openspliceai     = ["torch>=2.0", "openspliceai"]
 spliceai_pytorch = ["torch>=2.0"]                   # uses bundled translated weights
-pangolin         = ["torch>=2.0", "pangolin-nn"]
+pangolin         = ["torch>=2.0"]                   # install Pangolin from github separately
 spliceformer     = ["torch>=2.0", "transformers", "einops"]
 spliceai_keras   = ["tensorflow>=2.8", "spliceai"]  # reference / verification only
-all              = [                                # production set (no Keras)
-  "torch>=2.0", "openspliceai", "pangolin-nn",
-  "transformers", "einops",
+all              = [                                # all 4 production engines
+  "torch>=2.0", "openspliceai", "transformers", "einops",
 ]
-all_with_reference = [                              # production + Keras reference
-  "torch>=2.0", "openspliceai", "pangolin-nn",
-  "transformers", "einops",
-  "tensorflow>=2.8", "spliceai",
-]
+
+# ── Protein-library / Oncosplice protein-divergence score (optional) ───────
+# Required for `analyze_pair(protein=True)`, alternative-isoform enumeration,
+# and the original Oncosplice score from Lynn & Tuller 2024. The splicing-
+# epistasis classification core does NOT need this.
+protein          = ["geney>=2.0"]
+
 dev              = ["pytest>=7", "pytest-cov", "ruff"]
 
 [project.scripts]
