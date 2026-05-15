@@ -27,8 +27,7 @@ from typing import List, Optional, Sequence
 
 import numpy as np
 
-from .base import SplicingPredictor, SplicingPrediction
-
+from .base import SplicingPrediction, SplicingPredictor
 
 _DEFAULT_REPO = Path.home() / "Documents/phd/libraries/Spliceformer"
 _DEFAULT_GLOB = "transformer_encoder_45k_*"
@@ -80,8 +79,8 @@ class Spliceformer(SplicingPredictor):
         if not any((self.repo_dir / "Results" / "PyTorch_Models").glob(self._model_glob)):
             return False
         try:
-            import torch  # noqa: F401
             import einops  # noqa: F401  (required by SpliceFormer)
+            import torch  # noqa: F401
             return True
         except ImportError:
             return False

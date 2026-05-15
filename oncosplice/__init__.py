@@ -31,27 +31,27 @@ from __future__ import annotations
 
 # Engines + weights are dependency-light and safe to import eagerly.
 from .engines import (
-    SplicingPredictor,
-    SplicingPrediction,
+    EnsemblePredictor,
     OpenSpliceAI,
+    Pangolin,
     SpliceAIKeras,
     SpliceAIPyTorch,
-    Pangolin,
     Spliceformer,
-    EnsemblePredictor,
+    SplicingPrediction,
+    SplicingPredictor,
     get_predictor,
     list_available_engines,
 )
-from .variants import Variant, VariantPair
 from .results import (
-    SingleVariantResult,
     DoubleVariantResult,
-    MultiVariantResult,
-    SiteEpistasis,
     MissplicingProfile,
+    MultiVariantResult,
     ProteinLibrary,
+    SingleVariantResult,
+    SiteEpistasis,
 )
 from .scoring.fingerprint import splicing_outcome_fingerprint, splicing_outcome_hash
+from .variants import Variant, VariantPair
 
 __version__ = "3.2.0"  # 5-category classification: syn / rescue / compounding / ant / non-epi
 

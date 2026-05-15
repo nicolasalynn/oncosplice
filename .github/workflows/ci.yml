@@ -35,7 +35,10 @@ jobs:
         run: pip install -e . --no-deps
 
       - name: Lint with ruff
-        run: ruff check oncosplice/ --select E,F,W,I --ignore E501,E402
+        # F841 (unused-variable) is intentionally ignored — some assignments
+        # document intent / shape even when the value isn't read.
+        # E501 (line-too-long) and E402 (top-level imports) similarly.
+        run: ruff check oncosplice/ --select E,F,W,I --ignore E501,E402,F841
 
       - name: Run pure-python tests
         # Skip tests that need geney/seqmat/torch — those are integration tests

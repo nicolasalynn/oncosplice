@@ -29,7 +29,7 @@ import hashlib
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..results import SingleVariantResult, DoubleVariantResult
+    from ..results import DoubleVariantResult, SingleVariantResult
 
 DEFAULT_DELTA   = 0.25   # |Δprob| threshold for "lost" / "gained"
 DEFAULT_ACTIVE  = 0.10   # max-context activity floor to count a site at all
@@ -136,7 +136,7 @@ def splicing_outcome_fingerprint(
     >>> df["fp"] = df.apply(lambda r: splicing_outcome_fingerprint(r.result), axis=1)
     >>> df.groupby("fp").size().sort_values(ascending=False).head()
     """
-    from ..results import SingleVariantResult, DoubleVariantResult, MultiVariantResult
+    from ..results import DoubleVariantResult, MultiVariantResult, SingleVariantResult
 
     if isinstance(result, SingleVariantResult):
         counts = _outcome_counts_single(result, delta=delta)

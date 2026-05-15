@@ -24,10 +24,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional, Tuple
 
 import numpy as np
-import pandas as pd
 
 if TYPE_CHECKING:
-    from .results import SingleVariantResult, DoubleVariantResult
+    from .results import DoubleVariantResult, SingleVariantResult
 
 
 # ---- Color scheme (legible, color-blind friendly, consistent across plots) --
@@ -606,11 +605,7 @@ def _plot_case_study_bars(
 
     n_sites = len(sites)
     contexts = ["ref", "mut1", "mut2", "expected", "event"]
-    context_labels = {
-        "ref": "WT", "mut1": "mut1", "mut2": "mut2",
-        "expected": "expected", "event": "joint",
-    }
-    ctx_colors = [_COLORS[c] for c in contexts]
+    [_COLORS[c] for c in contexts]
 
     if figsize is None:
         width = max(3.5, 0.95 * max(1, n_sites) + 1.0)

@@ -14,7 +14,7 @@ from typing import List, Sequence
 
 import numpy as np
 
-from .base import SplicingPredictor, SplicingPrediction
+from .base import SplicingPrediction, SplicingPredictor
 
 
 class SpliceAIKeras(SplicingPredictor):
@@ -40,8 +40,8 @@ class SpliceAIKeras(SplicingPredictor):
     def _ensure_loaded(self):
         if SpliceAIKeras._models is not None:
             return SpliceAIKeras._models
-        from pathlib import Path
         from keras.models import load_model
+
         from ..weights import resolve_dir as _resolve
 
         # 1) centralised resolver (~/.oncosplice/weights/spliceai_keras/)

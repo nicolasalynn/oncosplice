@@ -7,11 +7,10 @@ plotting hooks (``.plot_*``) that delegate to :mod:`oncosplice.viz`.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
-import numpy as np
 import pandas as pd
 
 # ----------------------------------------------------------------------------

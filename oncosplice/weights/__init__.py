@@ -26,7 +26,6 @@ import zipfile
 from pathlib import Path
 from typing import Dict, List, Optional
 
-
 # Package-bundled weights (if anyone wants to vendor a small model)
 _PKG_WEIGHTS_DIR = Path(__file__).parent
 

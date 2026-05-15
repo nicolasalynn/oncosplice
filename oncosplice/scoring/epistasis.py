@@ -51,10 +51,9 @@ behind a compounding one elsewhere in the gene.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
-from typing import List, Optional
+from dataclasses import asdict, dataclass
+from typing import List
 
-import numpy as np
 import pandas as pd
 
 from .splicing import site_table_wide

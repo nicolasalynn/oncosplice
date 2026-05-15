@@ -26,30 +26,31 @@ import csv as _csv
 import logging
 from collections import OrderedDict
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Tuple, Union
+from typing import List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import pandas as pd
 
-from .variants import Variant, VariantPair
+from .engines import SplicingPredictor, get_predictor
 from .results import (
-    SingleVariantResult,
     DoubleVariantResult,
-    MultiVariantResult,
     MissplicingProfile,
-    ProteinLibrary,
-)
-from .scoring.splicing import (
-    extract_site_table, classify_missplicing, missplicing_to_dict,
-    max_splicing_delta, DEFAULT_DELTA_THRESHOLD,
+    MultiVariantResult,
+    SingleVariantResult,
 )
 from .scoring.epistasis import (
-    compute_site_residuals, compute_site_residuals_multi,
-    classify_pair, summarize_residuals,
     DEFAULT_RESIDUAL_THRESHOLD,
+    compute_site_residuals_multi,
+    summarize_residuals,
 )
-from .scoring.oncosplice import oncosplice_score, aggregate_isoform_scores
-from .engines import SplicingPredictor, get_predictor
+from .scoring.oncosplice import aggregate_isoform_scores, oncosplice_score
+from .scoring.splicing import (
+    DEFAULT_DELTA_THRESHOLD,
+    classify_missplicing,
+    max_splicing_delta,
+    missplicing_to_dict,
+)
+from .variants import Variant, VariantPair
 
 logger = logging.getLogger(__name__)
 
@@ -301,7 +302,7 @@ class OncospliceEngine:
 
         Returns (isoforms_df, aggregate_score, max_percentile).
         """
-        from ._geney_compat import TranscriptLibrary, SpliceSimulator
+        from ._geney_compat import SpliceSimulator
 
         # SpliceSimulator wants the wide multi-index format produced by
         # geney's adjoin_splicing_outcomes. We materialize a small wide

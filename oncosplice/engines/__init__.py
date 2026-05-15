@@ -33,13 +33,13 @@ from __future__ import annotations
 
 from typing import Callable, Dict, Iterable
 
-from .base import SplicingPredictor, SplicingPrediction
+from .base import SplicingPrediction, SplicingPredictor
+from .ensemble import EnsemblePredictor
 from .openspliceai import OpenSpliceAI
+from .pangolin import Pangolin
 from .spliceai_keras import SpliceAIKeras
 from .spliceai_pytorch import SpliceAIPyTorch
-from .pangolin import Pangolin
 from .spliceformer import Spliceformer
-from .ensemble import EnsemblePredictor
 
 __all__ = [
     "SplicingPredictor", "SplicingPrediction",

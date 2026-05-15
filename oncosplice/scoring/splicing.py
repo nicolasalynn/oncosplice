@@ -18,9 +18,8 @@ in the original Oncosplice paper:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List
 
-import numpy as np
 import pandas as pd
 
 DEFAULT_DELTA_THRESHOLD = 0.25  # Oncosplice paper default

@@ -10,7 +10,7 @@ from typing import List, Sequence
 
 import numpy as np
 
-from .base import SplicingPredictor, SplicingPrediction
+from .base import SplicingPrediction, SplicingPredictor
 
 
 class EnsemblePredictor(SplicingPredictor):

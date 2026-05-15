@@ -28,10 +28,10 @@ except ImportError:
 
 # ----- TranscriptLibrary + SpliceSimulator ------------------------------------
 try:
-    from geney.splicing import TranscriptLibrary, SpliceSimulator
+    from geney.splicing import SpliceSimulator, TranscriptLibrary
 except ImportError:  # flat layout
+    from geney.splice_graph import SpliceSimulator  # type: ignore
     from geney.transcripts import TranscriptLibrary  # type: ignore
-    from geney.splice_graph import SpliceSimulator   # type: ignore
 
 # ----- splice-engine setters --------------------------------------------------
 try:

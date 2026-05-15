@@ -26,8 +26,7 @@ from typing import List, Sequence
 
 import numpy as np
 
-from .base import SplicingPredictor, SplicingPrediction
-
+from .base import SplicingPrediction, SplicingPredictor
 
 # ----------------------------------------------------------------------------
 # Model architecture — plain ReLU SpliceAI 10k
@@ -45,7 +44,6 @@ def _arch_10000():
 
 def _build_model_class():
     """Return the SpliceAI_ReLU model class. Imports torch lazily."""
-    import torch
     import torch.nn as nn
     import torch.nn.functional as F
 
@@ -191,7 +189,9 @@ class SpliceAIPyTorch(SplicingPredictor):
         return None
 
     def _pick_device(self):
-        import torch, sys
+        import sys
+
+        import torch
         if self._device_override:
             return torch.device(self._device_override)
         if torch.cuda.is_available():
