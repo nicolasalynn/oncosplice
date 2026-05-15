@@ -53,8 +53,8 @@ try:
     from geney.splicing import SpliceSimulator, TranscriptLibrary
 except ImportError:
     try:
-        from geney.transcripts import TranscriptLibrary
         from geney.splice_graph import SpliceSimulator
+        from geney.transcripts import TranscriptLibrary
     except ImportError:
         TranscriptLibrary = _missing("TranscriptLibrary")
         SpliceSimulator = _missing("SpliceSimulator")

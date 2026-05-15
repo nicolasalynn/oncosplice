@@ -31,7 +31,7 @@ Reference-only engine (use for one-time verification, not production):
 """
 from __future__ import annotations
 
-from typing import Callable, Dict, Iterable
+from typing import Callable, Dict
 
 from .base import SplicingPrediction, SplicingPredictor
 from .ensemble import EnsemblePredictor
