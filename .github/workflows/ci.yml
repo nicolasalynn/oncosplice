@@ -35,10 +35,12 @@ jobs:
         run: pip install -e . --no-deps
 
       - name: Lint with ruff
-        # F841 (unused-variable) is intentionally ignored — some assignments
-        # document intent / shape even when the value isn't read.
-        # E501 (line-too-long) and E402 (top-level imports) similarly.
-        run: ruff check oncosplice/ --select E,F,W,I --ignore E501,E402,F841
+        # Stylistic codes we tolerate intentionally:
+        # - E501  line-too-long (long docstrings / SQL-ish data lines)
+        # - E402  module-level import not at top (lazy-import patterns)
+        # - F841  unused-variable (some assignments document intent)
+        # - E701  multiple statements on one line (compact dict-builder pattern)
+        run: ruff check oncosplice/ --select E,F,W,I --ignore E501,E402,F841,E701
 
       - name: Run pure-python tests
         # Skip tests that need geney/seqmat/torch — those are integration tests
