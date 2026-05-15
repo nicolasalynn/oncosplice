@@ -53,7 +53,7 @@ dev              = ["pytest>=7", "pytest-cov", "ruff"]
 oncosplice-download-weights = "oncosplice.weights:_cli"
 
 [project.urls]
-homepage = "https://github.com/nicolaslynn/oncosplice"
+homepage = "https://github.com/nicolasalynn/oncosplice"
 
 [tool.setuptools]
 packages = ["oncosplice", "oncosplice.scoring", "oncosplice.engines", "oncosplice.weights"]
