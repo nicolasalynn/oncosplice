@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oncosplice"
+version = "3.2.0"
+description = "Sequence-level pipeline for splicing-epistasis analysis of single, double, and N-variant constructs"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Nicolas Lynn" }]
+license = { text = "MIT" }
+keywords = [
+  "splicing", "epistasis", "oncosplice",
+  "spliceai", "openspliceai", "pangolin", "spliceformer",
+  "cancer-genomics",
+]
+
+dependencies = [
+  "numpy>=1.23",
+  "pandas>=2.0",
+  "matplotlib>=3.7",
+  "biopython>=1.81",
+  # Lower bounds chosen to match the user's currently-working environment.
+  # NEVER reinstall this package without --no-deps unless these are still satisfied.
+  "geney>=2.0",
+  "seqmat>=1.3",
+]
+
+# Per-engine optional extras — install only the splice-site backend you need.
+# Note: spliceai_pytorch is the recommended path for the original SpliceAI
+# weights (numerically identical to Keras, ~2.5× faster, no TF dependency).
+# The spliceai_keras extra is kept ONLY as the reference implementation for
+# verification of the Keras→PyTorch translation.
+[project.optional-dependencies]
+openspliceai     = ["torch>=2.0", "openspliceai"]
+spliceai_pytorch = ["torch>=2.0"]                   # uses bundled translated weights
+pangolin         = ["torch>=2.0", "pangolin-nn"]
+spliceformer     = ["torch>=2.0", "transformers", "einops"]
+spliceai_keras   = ["tensorflow>=2.8", "spliceai"]  # reference / verification only
+all              = [                                # production set (no Keras)
+  "torch>=2.0", "openspliceai", "pangolin-nn",
+  "transformers", "einops",
+]
+all_with_reference = [                              # production + Keras reference
+  "torch>=2.0", "openspliceai", "pangolin-nn",
+  "transformers", "einops",
+  "tensorflow>=2.8", "spliceai",
+]
+dev              = ["pytest>=7", "pytest-cov", "ruff"]
+
+[project.scripts]
+oncosplice-download-weights = "oncosplice.weights:_cli"
+
+[project.urls]
+homepage = "https://github.com/nicolaslynn/oncosplice"
+
+[tool.setuptools]
+packages = ["oncosplice", "oncosplice.scoring", "oncosplice.engines", "oncosplice.weights"]
+
+[tool.setuptools.package-data]
+oncosplice = ["py.typed"]
+"oncosplice.weights" = ["manifest.json"]

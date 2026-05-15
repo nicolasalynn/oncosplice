@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    name: pytest (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dev deps
+        run: |
+          python -m pip install --upgrade pip
+          # Core deps only — the splice engines aren't needed for the pure-python
+          # scoring/variants/scoring tests, and skipping them keeps CI fast.
+          pip install numpy pandas matplotlib biopython pytest pytest-cov ruff
+
+      - name: Install oncosplice (no engine extras, no geney/seqmat)
+        run: pip install -e . --no-deps
+
+      - name: Lint with ruff
+        run: ruff check oncosplice/ --select E,F,W,I --ignore E501,E402
+
+      - name: Run pure-python tests
+        # Skip tests that need geney/seqmat/torch — those are integration tests
+        # the user runs locally; CI focuses on the scoring + variants logic.
+        run: |
+          pytest tests/test_scoring.py tests/test_variants.py -v \
+            --cov=oncosplice.scoring \
+            --cov=oncosplice.variants \
+            --cov-report=term-missing

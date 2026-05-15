@@ -1,0 +1,74 @@
+{
+  "_comment": "Mapping of model_name → download instructions. Populate the URLs once weights are hosted (e.g. HuggingFace, Zenodo, GCS). Each model's directory will be created under ~/.oncosplice/weights/<model_name>/. If `auto_unzip` is true (default) and the file is a .zip, it will be extracted in place.",
+
+  "openspliceai": {
+    "description": "OpenSpliceAI (PyTorch port of SpliceAI) — 5-model ensemble, 10000nt MANE-trained weights. Default for the OpenSpliceAI predictor.",
+    "source_paper": "https://doi.org/10.1101/2024.10.10.617692",
+    "files": [
+      {
+        "filename": "openspliceai-mane-10000nt.zip",
+        "url": "REPLACE_WITH_HOSTING_URL/openspliceai-mane-10000nt.zip"
+      }
+    ]
+  },
+
+  "spliceai_pytorch": {
+    "description": "SpliceAI weights translated Keras→PyTorch, loaded into the OpenSpliceAI architecture. Use this when you need numerical equivalence with the original Keras SpliceAI rather than OpenSpliceAI's separately-trained MANE weights.",
+    "source_paper": "https://doi.org/10.1016/j.cell.2018.12.015",
+    "files": [
+      {
+        "filename": "spliceai-pytorch-translated.zip",
+        "url": "REPLACE_WITH_HOSTING_URL/spliceai-pytorch-translated.zip"
+      }
+    ]
+  },
+
+  "spliceai_keras": {
+    "description": "SpliceAI original Keras/TF weights (Jaganathan et al. 2019) — 5-model ensemble.",
+    "source_paper": "https://doi.org/10.1016/j.cell.2018.12.015",
+    "files": [
+      {
+        "filename": "spliceai1.h5",
+        "url": "REPLACE_WITH_HOSTING_URL/spliceai1.h5"
+      },
+      {
+        "filename": "spliceai2.h5",
+        "url": "REPLACE_WITH_HOSTING_URL/spliceai2.h5"
+      },
+      {
+        "filename": "spliceai3.h5",
+        "url": "REPLACE_WITH_HOSTING_URL/spliceai3.h5"
+      },
+      {
+        "filename": "spliceai4.h5",
+        "url": "REPLACE_WITH_HOSTING_URL/spliceai4.h5"
+      },
+      {
+        "filename": "spliceai5.h5",
+        "url": "REPLACE_WITH_HOSTING_URL/spliceai5.h5"
+      }
+    ]
+  },
+
+  "pangolin": {
+    "description": "Pangolin — 40 PyTorch models (8 indices × 5 ensemble members), multi-tissue GTEx-trained.",
+    "source_paper": "https://doi.org/10.1186/s13059-022-02664-4",
+    "files": [
+      {
+        "filename": "pangolin-models.zip",
+        "url": "REPLACE_WITH_HOSTING_URL/pangolin-models.zip"
+      }
+    ]
+  },
+
+  "spliceformer": {
+    "description": "Spliceformer — 40k-context transformer ensemble (Jónsson et al. Comms Bio 2024).",
+    "source_paper": "https://doi.org/10.1038/s42003-024-07298-9",
+    "files": [
+      {
+        "filename": "spliceformer-encoder-40k.zip",
+        "url": "REPLACE_WITH_HOSTING_URL/spliceformer-encoder-40k.zip"
+      }
+    ]
+  }
+}
