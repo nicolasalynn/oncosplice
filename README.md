@@ -1,6 +1,6 @@
 # oncosplice
 
-[![CI](https://github.com/nicolaslynn/oncosplice/actions/workflows/ci.yml/badge.svg)](https://github.com/nicolaslynn/oncosplice/actions/workflows/ci.yml)
+[![CI](https://github.com/nicolasalynn/oncosplice/actions/workflows/ci.yml/badge.svg)](https://github.com/nicolasalynn/oncosplice/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
