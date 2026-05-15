@@ -17,10 +17,12 @@ keywords = [
 ]
 
 dependencies = [
+  # Minimums chosen for numpy 2.x compatibility:
+  # pandas≥2.2.2, matplotlib≥3.9, biopython≥1.84 all support numpy 2.
   "numpy>=1.23",
-  "pandas>=2.0",
-  "matplotlib>=3.7",
-  "biopython>=1.81",
+  "pandas>=2.2.2",
+  "matplotlib>=3.9",
+  "biopython>=1.84",
   "seqmat>=1.3",
 ]
 

@@ -29,9 +29,9 @@ jobs:
           python -m pip install --upgrade pip
           # Core deps only — the splice engines aren't needed for the pure-python
           # scoring/variants tests, and skipping them keeps CI fast.
-          # numpy<2 pinned because numpy 2.x triggers a multiarray double-import
-          # error on the GH Actions runners with the matplotlib/pandas combo.
-          pip install "numpy<2" pandas matplotlib biopython pytest pytest-cov ruff
+          # Use numpy-2-compatible minimums for pandas/matplotlib/biopython.
+          pip install "pandas>=2.2.2" "matplotlib>=3.9" "biopython>=1.84" \
+                      pytest pytest-cov ruff
 
       - name: Install oncosplice (no engine extras, no geney/seqmat)
         run: pip install -e . --no-deps
