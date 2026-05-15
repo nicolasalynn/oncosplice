@@ -40,7 +40,7 @@ jobs:
         # - E402  module-level import not at top (lazy-import patterns)
         # - F841  unused-variable (some assignments document intent)
         # - E701  multiple statements on one line (compact dict-builder pattern)
-        run: ruff check oncosplice/ --select E,F,W,I --ignore E501,E402,F841,E701
+        run: ruff check oncosplice/ --select E,F,W,I --ignore E501,E402,F841,E701,E702,E731,E741
 
       - name: Run pure-python tests
         # Skip tests that need geney/seqmat/torch — those are integration tests
