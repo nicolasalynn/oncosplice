@@ -146,8 +146,30 @@ class SiteResidual:
     * ``cryptic_synergy_residual  = event − expected``
         positive ⇒ joint above additive (novel site created beyond null)
 
+    On top of the four class-specific residuals, two signed general residuals
+    summarise the per-site epistasis. Both share the convention
+    ``+ve ⇒ synergy direction``, ``−ve ⇒ rescue direction``, so they're
+    directly comparable:
+
+    * ``residual_vs_expected``
+        Classical additive-null residual.
+        annotated: ``expected − event`` (positive = below additive).
+        cryptic:   ``event − expected`` (positive = above additive).
+    * ``residual_vs_individuals``
+        Distance past the most-relevant individual single.
+        annotated: ``max(min_mut − event, 0) − max(event − max_mut, 0)``
+            i.e. positive = past the worst-damaged single, negative = past
+            the best-preserved single. Zero when event lies between the two
+            singles.
+        cryptic:   ``max(event − max_mut, 0) − max(min_mut − event, 0)``
+            i.e. positive = past the most-cryptic-creating single, negative
+            = below the least-active single (cryptic silencing).
+
+    For annotated sites "more pathogenic" means *lower* probability; for
+    cryptic sites it means *higher* probability.
+
     ``classification`` is the single label the rules assign (only one class can
-    fire per site by construction). The four residuals are always populated
+    fire per site by construction). The class residuals are always populated
     so callers can inspect "near-miss" candidates for any mechanism.
     """
     position: int
@@ -164,11 +186,35 @@ class SiteResidual:
     cryptic_rescue_residual:   float
     deletion_synergy_residual: float
     cryptic_synergy_residual:  float
+    residual_vs_expected:      float  # signed general residual vs additive null
+    residual_vs_individuals:   float  # signed general residual vs the relevant single
 
     def as_dict(self) -> dict:
         d = asdict(self)
         d["position"] = int(d["position"])
         return d
+
+
+def _general_epistasis_residuals(
+    min_mut: float, max_mut: float, event: float,
+    expected: float, annotated: bool,
+) -> tuple[float, float]:
+    """Return ``(residual_vs_expected, residual_vs_individuals)``.
+
+    Both signed with ``+ve = synergy direction``, ``−ve = rescue direction``.
+    See :class:`SiteResidual` for the formulas.
+    """
+    if annotated:
+        # damaging direction = lower probability
+        rve = expected - event                              # + ⇒ below additive (synergy)
+        syn = max(min_mut - event, 0.0)                     # past worst (most damaged) single
+        res = max(event - max_mut, 0.0)                     # past best  (least damaged) single
+    else:
+        # damaging direction = higher probability (cryptic activation)
+        rve = event - expected                              # + ⇒ above additive (synergy)
+        syn = max(event - max_mut, 0.0)                     # past worst (most active) single
+        res = max(min_mut - event, 0.0)                     # past best  (least active) single
+    return float(rve), float(syn - res)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -234,13 +280,16 @@ def _classify_site_full(
     high_band:          float = HIGH_BAND,
     low_band:           float = LOW_BAND,
     near_wt:            float = NEAR_WT,
-) -> tuple[str, float, float, float, float]:
+) -> tuple[str, float, float, float, float, float, float]:
     """Return ``(classification, rescue_res, cryptic_rescue_res,
-    deletion_synergy_res, cryptic_synergy_res)``.
+    deletion_synergy_res, cryptic_synergy_res,
+    residual_vs_expected, residual_vs_individuals)``.
 
-    All four residuals are always computed and signed in *mechanism
-    direction* (positive ⇒ that class would be supported by this site).
-    ``classification`` selects which one fired.
+    All four class-specific residuals are always computed and signed in
+    *mechanism direction* (positive ⇒ that class would be supported by this
+    site). ``classification`` selects which one fired. The two general
+    residuals share the convention +ve = synergy, −ve = rescue — see
+    :func:`_general_epistasis_residuals`.
 
     ``annotated`` must agree with the WT band, otherwise the site is
     non-epistatic regardless of mutation values:
@@ -248,7 +297,7 @@ def _classify_site_full(
       * not annotated → ref ≤ low_band
     """
     if not muts:
-        return "non-epistatic", 0.0, 0.0, 0.0, 0.0
+        return "non-epistatic", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
     n = len(muts)
     min_mut = min(muts)
     max_mut = max(muts)
@@ -260,12 +309,15 @@ def _classify_site_full(
     cryptic_rescue_res  = float(max_mut - event)        # +ve = joint below cryptic creator
     deletion_synergy_res = float(expected - event)      # +ve = joint below additive
     cryptic_synergy_res  = float(event - expected)      # +ve = joint above additive
+    rve, rvi             = _general_epistasis_residuals(
+        min_mut, max_mut, event, expected, annotated,
+    )
 
     # ── WT-vs-annotation prerequisite (the noise filter) ────────────
     if annotated:
         if ref < high_band:
             return ("non-epistatic", rescue_res, cryptic_rescue_res,
-                    deletion_synergy_res, cryptic_synergy_res)
+                    deletion_synergy_res, cryptic_synergy_res, rve, rvi)
         # ── deletion_synergy
         if (
             min_mut >= high_band
@@ -273,7 +325,7 @@ def _classify_site_full(
             and deletion_synergy_res >= residual_threshold
         ):
             return ("deletion_synergy", rescue_res, cryptic_rescue_res,
-                    deletion_synergy_res, cryptic_synergy_res)
+                    deletion_synergy_res, cryptic_synergy_res, rve, rvi)
         # ── rescue
         if (
             min_mut <= (ref - high_band)
@@ -281,14 +333,14 @@ def _classify_site_full(
             and rescue_res >= residual_threshold
         ):
             return ("rescue", rescue_res, cryptic_rescue_res,
-                    deletion_synergy_res, cryptic_synergy_res)
+                    deletion_synergy_res, cryptic_synergy_res, rve, rvi)
         return ("non-epistatic", rescue_res, cryptic_rescue_res,
-                deletion_synergy_res, cryptic_synergy_res)
+                deletion_synergy_res, cryptic_synergy_res, rve, rvi)
 
     # ── unannotated branch ──────────────────────────────────────────
     if ref > low_band:
         return ("non-epistatic", rescue_res, cryptic_rescue_res,
-                deletion_synergy_res, cryptic_synergy_res)
+                deletion_synergy_res, cryptic_synergy_res, rve, rvi)
     # ── cryptic_synergy
     if (
         max_mut <= low_band
@@ -296,7 +348,7 @@ def _classify_site_full(
         and cryptic_synergy_res >= residual_threshold
     ):
         return ("cryptic_synergy", rescue_res, cryptic_rescue_res,
-                deletion_synergy_res, cryptic_synergy_res)
+                deletion_synergy_res, cryptic_synergy_res, rve, rvi)
     # ── cryptic_rescue
     if (
         max_mut >= high_band
@@ -304,9 +356,9 @@ def _classify_site_full(
         and cryptic_rescue_res >= residual_threshold
     ):
         return ("cryptic_rescue", rescue_res, cryptic_rescue_res,
-                deletion_synergy_res, cryptic_synergy_res)
+                deletion_synergy_res, cryptic_synergy_res, rve, rvi)
     return ("non-epistatic", rescue_res, cryptic_rescue_res,
-            deletion_synergy_res, cryptic_synergy_res)
+            deletion_synergy_res, cryptic_synergy_res, rve, rvi)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -449,6 +501,24 @@ def compute_site_residuals_multi(
     deletion_synergy_residual  = expected  - event_k     # joint below additive
     cryptic_synergy_residual   = event_k   - expected    # joint above additive
 
+    # Two general signed residuals, both with +ve = synergy, -ve = rescue.
+    zero = _np.zeros_like(event_k)
+    # vs additive expected: classical residual (sign-flipped for cryptic)
+    rve = _np.where(annotated_k, expected - event_k, event_k - expected)
+    # vs individual mutations: past worst (synergy) or best (rescue) single, 0 between.
+    # Annotated: worst=min, best=max; Cryptic: worst=max, best=min.
+    syn_dist = _np.where(
+        annotated_k,
+        _np.maximum(min_mut - event_k, zero),    # event below worst-damaged single
+        _np.maximum(event_k - max_mut, zero),    # event above worst-cryptic single
+    )
+    res_dist = _np.where(
+        annotated_k,
+        _np.maximum(event_k - max_mut, zero),    # event above best-preserved single
+        _np.maximum(min_mut - event_k, zero),    # event below least-active single
+    )
+    rvi = syn_dist - res_dist
+
     out = pd.DataFrame({
         "position":       wide["position"].to_numpy()[keep].astype(int),
         "site_type":      wide["site_type"].to_numpy()[keep].astype(str),
@@ -464,6 +534,8 @@ def compute_site_residuals_multi(
         "cryptic_rescue_residual":   cryptic_rescue_residual,
         "deletion_synergy_residual": deletion_synergy_residual,
         "cryptic_synergy_residual":  cryptic_synergy_residual,
+        "residual_vs_expected":      rve,
+        "residual_vs_individuals":   rvi,
     })
     return out
 

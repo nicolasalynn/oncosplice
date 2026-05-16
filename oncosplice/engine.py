@@ -44,11 +44,19 @@ from .scoring.epistasis import (
     summarize_residuals,
 )
 from .scoring.oncosplice import aggregate_isoform_scores, oncosplice_score
+from .scoring.site_query import (
+    IntronQueryResult,
+    SiteQueryResult,
+    auto_derive_intron,
+    query_intron_from_table,
+    query_site_from_table,
+)
 from .scoring.splicing import (
     DEFAULT_DELTA_THRESHOLD,
     classify_missplicing,
     max_splicing_delta,
     missplicing_to_dict,
+    site_table_wide,
 )
 from .variants import Variant, VariantPair
 
@@ -639,6 +647,62 @@ class OncospliceEngine:
         result._mut_scores   = mut_scores       # type: ignore[attr-defined]
         result._mut_isoforms = mut_isoforms     # type: ignore[attr-defined]
         return result
+
+    # ------------------------------------------------------------------
+    # Public: targeted site / intron queries
+    # ------------------------------------------------------------------
+    def query_site(
+        self,
+        mut_ids: Union[Sequence[str], str],
+        position: int,
+        site_type: str,
+        *,
+        transcript_id: Optional[str] = None,
+    ) -> SiteQueryResult:
+        """Per-context probabilities + additive residual at one splice site.
+
+        ``site_type`` is ``'acceptor'`` or ``'donor'``. Returns a
+        :class:`SiteQueryResult` with ``contexts`` (ref, mut1..N, event),
+        ``expected = Σ p_mut_i − (N−1)·p_ref`` and ``residual = p_event − expected``.
+        Missing predictions are NaN-filled with a warning.
+        """
+        m = self.analyze_multi(mut_ids, transcript_id=transcript_id, protein=False)
+        wide = site_table_wide(m.site_table)
+        return query_site_from_table(wide, int(position), site_type, n_variants=m.n_variants)
+
+    def query_intron(
+        self,
+        mut_ids: Union[Sequence[str], str],
+        *,
+        donor_pos: Optional[int] = None,
+        acceptor_pos: Optional[int] = None,
+        transcript_id: Optional[str] = None,
+    ) -> IntronQueryResult:
+        """Per-context PSI + additive residual for an intron / exon.
+
+        ``PSI(ctx) = p_acceptor(ctx) × p_donor(ctx)``;
+        ``psi_residual = PSI(event) − [Σ PSI(mut_i) − (N−1)·PSI(ref)]``.
+
+        If ``donor_pos`` or ``acceptor_pos`` are omitted, both are auto-derived
+        as the smallest annotated (donor, acceptor) pair that brackets the
+        variant positions (strand-agnostic). Pass them explicitly to query a
+        non-bracketing intron (e.g. an upstream / downstream intron whose
+        splicing is altered by the variants).
+        """
+        m = self.analyze_multi(mut_ids, transcript_id=transcript_id, protein=False)
+        wide = site_table_wide(m.site_table)
+        if donor_pos is None or acceptor_pos is None:
+            ann_d = wide[(wide.site_type == "donor")    & wide.annotated].position.tolist()
+            ann_a = wide[(wide.site_type == "acceptor") & wide.annotated].position.tolist()
+            d_auto, a_auto = auto_derive_intron(
+                ann_d, ann_a,
+                [int(s.split(":")[2]) for s in m.mut_ids],
+            )
+            if donor_pos    is None: donor_pos    = d_auto
+            if acceptor_pos is None: acceptor_pos = a_auto
+        return query_intron_from_table(
+            wide, int(donor_pos), int(acceptor_pos), n_variants=m.n_variants,
+        )
 
     # ------------------------------------------------------------------
     # Public: batched scan (the only scan method; replaces 4 legacy ones)
