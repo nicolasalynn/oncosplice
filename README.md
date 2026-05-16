@@ -1,15 +1,31 @@
 # oncosplice
 
+[![PyPI](https://img.shields.io/pypi/v/oncosplice.svg)](https://pypi.org/project/oncosplice/)
 [![CI](https://github.com/nicolasalynn/oncosplice/actions/workflows/ci.yml/badge.svg)](https://github.com/nicolasalynn/oncosplice/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
+[![codecov](https://codecov.io/gh/nicolasalynn/oncosplice/branch/main/graph/badge.svg)](https://codecov.io/gh/nicolasalynn/oncosplice)
+[![Docs](https://img.shields.io/badge/docs-mkdocs-blue)](https://nicolasalynn.github.io/oncosplice)
+[![Python](https://img.shields.io/pypi/pyversions/oncosplice.svg)](https://pypi.org/project/oncosplice/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-**Sequence-level pipeline for splicing-epistasis analysis** of single-, double-, and N-variant constructs. Computes splice-site probabilities under each context, classifies the joint effect against the additive prediction, and identifies the mechanism (synergy, rescue, compounding).
+> Given two (or more) mutations in the same gene, classify how their joint
+> effect on splicing differs from the additive prediction — into one of four
+> mutually-exclusive mechanism classes: **rescue**, **cryptic rescue**,
+> **deletion synergy**, or **cryptic synergy**.
+
+**oncosplice** is a sequence-level pipeline for splicing-epistasis analysis of
+single-, double-, and N-variant constructs. It runs a splice-site predictor
+(SpliceAI, OpenSpliceAI, Pangolin, or Spliceformer) under each variant context,
+computes per-site residuals against the additive expectation, and applies a
+crisp 4-class mechanistic classifier.
 
 Implements the algorithms from:
 
-1. *Detecting and understanding meaningful cancerous mutations based on computational models of mRNA splicing* (Lynn & Tuller, npj Systems Biology 2024) — the Oncosplice scoring pipeline.
-2. *Large-scale insight into missplicing, intra-gene epistasis and its relevance to human cancer* (in prep) — the splicing-epistasis layer for multi-variant constructs.
+1. *Detecting and understanding meaningful cancerous mutations based on computational models of mRNA splicing* — Lynn & Tuller, *npj Systems Biology* 2024.
+2. *Large-scale insight into missplicing, intra-gene epistasis and its relevance to human cancer* — in preparation.
+
+```bash
+pip install oncosplice[spliceai_pytorch]
+```
 
 ## What it does
 
@@ -23,18 +39,39 @@ Given two (or more) genomic variants in the same gene, oncosplice answers:
 ## Install
 
 ```bash
-pip install -e .                # core (no splice engine)
-pip install -e .[all]           # all 4 production engines
-pip install -e .[openspliceai]  # OpenSpliceAI alone
-pip install -e .[spliceai_pytorch]  # original SpliceAI weights, PyTorch architecture
-pip install -e .[pangolin]      # Pangolin
-pip install -e .[spliceformer]  # Spliceformer 40k transformer
-pip install -e .[protein]       # add the protein-library / Oncosplice score path
+# Recommended — original SpliceAI weights, PyTorch backbone (no TF dependency)
+pip install oncosplice[spliceai_pytorch]
+
+# Or pick another engine
+pip install oncosplice[openspliceai]   # OpenSpliceAI (MANE-trained, retrained)
+pip install oncosplice[pangolin]       # Pangolin (40-model multi-tissue)
+pip install oncosplice[spliceformer]   # Spliceformer (40k transformer)
+pip install oncosplice[all]            # all 4 production engines
+
+# Optional add-ons
+pip install oncosplice[protein]        # protein-divergence score (Lynn & Tuller 2024)
 ```
 
-Core requires: `numpy`, `pandas`, `matplotlib`, `biopython`, `seqmat`. The package preserves your env if installed with `--no-deps`.
+Core requires `numpy`, `pandas`, `matplotlib`, `biopython`, `seqmat`. The
+classification core (`analyze_pair`, `scan`, `classify_dataframe`) has **no
+`geney` dependency** — `geney` is only needed for the protein-divergence score
+path (`[protein]` extra).
 
-The classification core (`analyze_pair`, `scan`, `classify_dataframe`) has **no `geney` dependency** as of 3.2.0 — `geney` is needed only for the protein-library / Oncosplice protein-divergence score path (`[protein]` extra).
+## Highlights
+
+- **Four production engines under one interface** — SpliceAI (PyTorch port,
+  numerically identical to Keras), OpenSpliceAI, Pangolin, Spliceformer. Swap
+  with one string. Cross-engine ensembling via `ensemble:a,b,c`.
+- **Four-class mechanistic classifier** — rescue / cryptic rescue / deletion
+  synergy / cryptic synergy, defined on probability bands with a hard
+  WT-vs-annotation prerequisite that filters predictor noise.
+- **TCGA-scale runner** — `classify_dataframe()` does per-gene grouping +
+  batched inference + resumable checkpointing. ~23× faster than per-pair after
+  the 3.2.0 vectorization; 800k pairs in ~22 hours on an L40S.
+- **Numerical parity tests** between Keras SpliceAI and the PyTorch port so
+  the migration is auditable.
+- **Pure-python scoring core** (`oncosplice.scoring`) with no model
+  dependencies — usable as a library in other splicing-prediction stacks.
 
 ## Quickstart
 
@@ -89,22 +126,66 @@ p = get_predictor("spliceai_pytorch")
 pred = p.predict(padded_sequence)  # → SplicingPrediction(acceptor, donor)
 ```
 
-## The classifier (3 mechanism buckets + dominance fallback)
+## The classifier — 4 mechanism classes
 
-The classifier anchors on three deltas at each splice site: `d1 = mut1 − ref`, `d2 = mut2 − ref`, `de = event − ref`. The residual is the *signed excess of the joint over the additive expectation*: `residual = de − (d1 + d2)`. We deliberately do **not** key the rules on `|residual|` alone — probabilities saturate near 0 and 1, so a large `|residual|` is often a boundary artifact rather than biology.
+At every splice site, given four predicted probabilities `ref`, `mut1`,
+`mut2`, `event` (all in [0, 1]) and the annotation flag, we test four
+mutually-exclusive rules. The residual `expected − event` (or `event − expected`,
+depending on direction) plus the band-membership of `ref`, `mut1`, `mut2`,
+`event` decide the class. `expected = mut1 + mut2 − ref` is the additive null.
 
-| Class | Rule (priority order, top first) | Mechanism |
+**Thresholds (one set, used everywhere):**
+
+| Symbol | Value | Meaning |
 |---|---|---|
-| **rescue** | worst single ≥ 0.30 in magnitude; joint ≤ 0.20 of WT; joint at least 0.15 closer to WT than worst; joint on the same side of WT as worst (tiny overshoots permitted). | One single substantially perturbs the splice site, the joint restores it (or near-WT). |
-| **synergistic — flip** | worst and joint on opposite sides; joint ≥ 0.15; joint differs from EVERY single by ≥ 0.15. | Singles push one way, joint produces an emergent opposite effect — neither single alone resembles the joint. |
-| **synergistic — emergent at edge** | ref ≤ 0.10 or ≥ 0.90; singles barely move; joint Δ ≥ 0.10. | The site was pegged at "off" or "on", neither single budges it, but the joint creates a discrete (logit-scale meaningful) change. |
-| **synergistic — super-additive** | joint > worst; joint > additive; (joint − additive) > 0.25 × worst. | Joint clearly exceeds both the strongest single and the additive prediction. |
-| **compounding** | both \|d\| ≥ 0.20; joint > worst; joint > additive; (joint − additive) ≤ 0.25 × worst. | Both mutations contribute meaningfully, joint reflects stacked (≈ additive) effect. |
-| **non-epistatic** | else. | Includes saturation artifacts, redundant disruption, dominance of one single, and noise. |
+| `HIGH` | 0.50 | "site present" (includes alt-spliced sites) |
+| `LOW` | 0.05 | "site absent" |
+| `RES` | 0.10 | minimum residual magnitude |
+| `NEAR_WT` | 0.20 | `|event − ref|` tolerance for rescue |
 
-Pair-level call: descending priority **synergistic > rescue > compounding > non-epistatic** over the per-site classifications.
+**Hard prerequisite — WT prediction must agree with annotation.** Every rule
+first checks that the engine's wild-type prediction is consistent with the
+annotation: `annotated == True ⇒ ref ≥ HIGH`, `annotated == False ⇒ ref ≤ LOW`.
+Sites where the engine disagrees with the annotation are dropped as
+non-epistatic without consulting the mutations. This is the noise filter.
 
-The classifier deliberately does **not** include an "antagonistic" bucket. Cases that look antagonistic under a strict `|residual|` rule almost always turn out to be saturation artifacts (joint pegged at 1.0 when additive predicts > 1.0) and are correctly reported as non-epistatic.
+### The four rules
+
+| Class | When the site is annotated (`ref ≥ HIGH`) | Rule | Residual |
+|---|---|---|---|
+| **rescue** | one single deletes, joint restores | `min(mut1, mut2) ≤ ref − HIGH` ∧ `|event − ref| ≤ NEAR_WT` ∧ `event − min(mut1, mut2) ≥ RES` | `rescue_residual = event − min(mut1, mut2)` |
+| **deletion synergy** | both singles preserve, joint destroys | `min(mut1, mut2) ≥ HIGH` ∧ `ref − event ≥ RES` ∧ `expected − event ≥ RES` | `synergy_residual = expected − event` |
+
+| Class | When the site is not annotated (`ref ≤ LOW`) | Rule | Residual |
+|---|---|---|---|
+| **cryptic rescue** | one single creates, joint silences | `max(mut1, mut2) ≥ HIGH` ∧ `event ≤ LOW` ∧ `max(mut1, mut2) − event ≥ RES` | `rescue_residual = max(mut1, mut2) − event` |
+| **cryptic synergy** | both silent, joint creates | `max(mut1, mut2) ≤ LOW` ∧ `event ≥ HIGH` ∧ `event − expected ≥ RES` | `synergy_residual = event − expected` |
+
+Anything else → **non-epistatic**.
+
+### Numeric example
+
+```
+# annotated acceptor in INPP5J — spliceai_pytorch
+ref = 0.972   annotated = True
+m1  = 0.658   (m1 alone preserves: 0.658 ≥ 0.50)
+m2  = 0.841   (m2 alone preserves: 0.841 ≥ 0.50)
+event   = 0.339
+expected = m1 + m2 - ref = 0.527
+
+# ref ≥ HIGH ✓ and annotated ✓                   → annotated branch
+# min(m1, m2) = 0.658 ≥ HIGH ✓                    → not rescue (singles preserve)
+# ref - event = 0.633 ≥ RES (0.10) ✓
+# expected - event = 0.188 ≥ RES (0.10) ✓         → deletion_synergy
+# synergy_residual = 0.188
+```
+
+### Pair-level aggregation
+
+A pair's overall label is the class of the splice site with the *largest*
+mechanism residual (rescue or synergy). Ties break by class priority:
+`deletion_synergy > cryptic_synergy > rescue > cryptic_rescue > non-epistatic`.
+The full per-site breakdown is always retained in `pair.site_residuals`.
 
 ## Available splicing engines
 

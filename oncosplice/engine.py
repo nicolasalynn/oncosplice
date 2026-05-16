@@ -488,7 +488,7 @@ class OncospliceEngine:
             oncosplice_score=float(agg_score),
             percentile=float(agg_pctl),
             site_table=site_table,
-            reference_protein=ref.protein or "",
+            reference_protein=getattr(ref, "protein", "") or "",
             reference_mrna=getattr(ref.mature_mrna, "seq", "") or "",
         )
 
@@ -632,7 +632,7 @@ class OncospliceEngine:
             site_table=site_table,
             isoforms_event=isoforms_event,
             oncosplice_score_event=agg_event,
-            reference_protein=ref.protein or "",
+            reference_protein=getattr(ref, "protein", "") or "",
         )
         # Stash auxiliary scores for analyze_pair's repackaging step.
         # Use private attrs so they're not part of the public dataclass API.
@@ -864,8 +864,9 @@ class OncospliceEngine:
         cp_writer = None; cp_fh = None
         FIELDS = ["construct_id", "n_variants", "pair_classification",
                   "max_abs_residual", "max_abs_event_delta",
-                  "n_syn", "n_rescue", "n_compound", "n_ant",
-                  "max_synergy_residual", "max_antagonism_residual",
+                  "n_del_syn", "n_cryp_syn", "n_rescue", "n_cryp_rescue",
+                  "max_rescue_residual", "max_cryptic_rescue_residual",
+                  "max_deletion_synergy_residual", "max_cryptic_synergy_residual",
                   "engine", "error"]
         try:
             for mut_id_list, vs, jk in iterator:
@@ -891,13 +892,15 @@ class OncospliceEngine:
                             "pair_classification":    summary["pair_classification"],
                             "max_abs_residual":       summary["max_abs_residual"],
                             "max_abs_event_delta":    summary["max_abs_event_delta"],
-                            "n_syn":                  summary["n_syn"],
+                            "n_del_syn":              summary["n_del_syn"],
+                            "n_cryp_syn":             summary["n_cryp_syn"],
                             "n_rescue":               summary["n_rescue"],
-                            "n_compound":             summary["n_compound"],
-                            "n_ant":                  summary["n_ant"],
-                            "max_synergy_residual":    summary["max_synergy_residual"],
-                            "max_antagonism_residual": summary["max_antagonism_residual"],
-                            "engine":                  self.splicing_engine,
+                            "n_cryp_rescue":          summary["n_cryp_rescue"],
+                            "max_rescue_residual":           summary["max_rescue_residual"],
+                            "max_cryptic_rescue_residual":   summary["max_cryptic_rescue_residual"],
+                            "max_deletion_synergy_residual": summary["max_deletion_synergy_residual"],
+                            "max_cryptic_synergy_residual":  summary["max_cryptic_synergy_residual"],
+                            "engine":                 self.splicing_engine,
                             "error":                  None,
                         })
                     else:
@@ -908,7 +911,8 @@ class OncospliceEngine:
                             "pair_classification": "singleton",
                             "max_abs_residual":    abs(float(delta)),
                             "max_abs_event_delta": abs(float(delta)),
-                            "n_syn": 0, "n_rescue": 0, "n_compound": 0, "n_ant": 0,
+                            "n_del_syn": 0, "n_cryp_syn": 0,
+                            "n_rescue": 0, "n_cryp_rescue": 0,
                             "engine":              self.splicing_engine,
                             "error":               None,
                         })
@@ -981,12 +985,13 @@ class OncospliceEngine:
         """Bulk-classify a DataFrame of pair / N-variant IDs using the batched
         :meth:`scan` path. Returns the input DataFrame with new columns:
 
-        - ``pair_classification``  (synergistic / rescue / compounding /
-          antagonistic / non-epistatic / singleton)
+        - ``pair_classification``  one of
+          deletion_synergy / cryptic_synergy / rescue / cryptic_rescue /
+          non-epistatic / singleton
         - ``max_abs_residual``      max |event − expected| across sites
         - ``max_abs_event_delta``   max |event − ref| across sites
-        - ``n_syn``, ``n_rescue``, ``n_compound``, ``n_ant``  per-class site counts
-        - ``max_synergy_residual``, ``max_antagonism_residual``
+        - ``n_del_syn``, ``n_cryp_syn``, ``n_rescue``, ``n_cryp_rescue``
+        - ``max_rescue_residual``, ``max_synergy_residual``
         - ``engine``  splicing engine used
         - ``error``   None if successful, else the exception message
 

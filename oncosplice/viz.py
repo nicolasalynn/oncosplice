@@ -31,18 +31,24 @@ if TYPE_CHECKING:
 
 # ---- Color scheme (legible, color-blind friendly, consistent across plots) --
 _COLORS = {
-    "ref":          "#444444",   # WT / reference
-    "mut1":         "#1f77b4",   # constituent variant 1 (solid)
-    "mut2":         "#1f77b4",   # constituent variant 2 (same colour, distinguished by hatch)
-    "event":        "#2ca02c",   # observed joint
-    "expected":     "#777777",   # additive null prediction (hatched)
-    "synergistic":  "#d62728",   # red — joint goes further than additive
-    "rescue":       "#0072b2",   # blue — single disrupts, joint returns to WT
-    "compounding":  "#cc79a7",   # magenta — additive but big total joint effect
-    "antagonistic": "#9467bd",   # purple — sub-additive (not rescue)
-    "non-epistatic": "#bbbbbb",
-    "donor":        "#1f77b4",
-    "acceptor":     "#d62728",
+    "ref":           "#444444",   # WT / reference
+    "mut1":          "#1f77b4",   # constituent variant 1 (solid)
+    "mut2":          "#1f77b4",   # constituent variant 2 (same colour, distinguished by hatch)
+    "event":         "#2ca02c",   # observed joint
+    "expected":      "#777777",   # additive null prediction (hatched)
+    # 4 mechanism classes
+    "deletion_synergy": "#d62728",   # red    — both preserve, joint destroys
+    "cryptic_synergy":  "#ff7f0e",   # orange — both silent, joint creates novel site
+    "rescue":           "#0072b2",   # blue   — one disrupts, joint restores
+    "cryptic_rescue":   "#56b4e9",   # light blue — one creates cryptic, joint silences
+    "non-epistatic":    "#bbbbbb",
+    # legacy aliases (so any stray plotting code that still says "synergistic"
+    # gets a sensible colour rather than KeyError)
+    "synergistic":   "#d62728",
+    "compounding":   "#cc79a7",
+    "antagonistic":  "#9467bd",
+    "donor":         "#1f77b4",
+    "acceptor":      "#d62728",
 }
 
 
@@ -207,8 +213,10 @@ def plot_pair_residuals(
         Line2D([0], [0], marker="D", color="w", markerfacecolor="white",
                markeredgecolor=_COLORS["expected"], label="expected (additive)", markersize=8),
         Line2D([0], [0], marker="s", color="w", markerfacecolor=_COLORS["event"], label="event (joint)", markersize=8),
-        Line2D([0], [0], color=_COLORS["synergistic"],   lw=2, label="synergistic"),
-        Line2D([0], [0], color=_COLORS["antagonistic"],  lw=2, label="antagonistic"),
+        Line2D([0], [0], color=_COLORS["deletion_synergy"], lw=2, label="deletion synergy"),
+        Line2D([0], [0], color=_COLORS["cryptic_synergy"],  lw=2, label="cryptic synergy"),
+        Line2D([0], [0], color=_COLORS["rescue"],           lw=2, label="rescue"),
+        Line2D([0], [0], color=_COLORS["cryptic_rescue"],   lw=2, label="cryptic rescue"),
     ]
     ax.legend(handles=legend_handles, loc="upper right", fontsize=8, frameon=False, ncol=2)
     fig.tight_layout()
@@ -404,26 +412,37 @@ def plot_pair_summary(
 # ---------------------------------------------------------------------------
 
 _MECHANISTIC_INTERPRETATIONS = {
+    "deletion_synergy":
+        "Annotated splice site is preserved by each single variant on its own, "
+        "but destroyed only when both mutations co-occur. The joint effect is "
+        "an emergent loss that neither variant predicts alone.",
+    "cryptic_synergy":
+        "No annotated splice site at this position, and neither single variant "
+        "creates one. Together the two variants generate a novel cryptic site — "
+        "a discrete gain-of-function that requires both mutations.",
+    "rescue":
+        "Annotated splice site is severely disrupted by one of the two single "
+        "variants. The joint variant restores splicing close to wild-type — "
+        "one mutation cancels the splicing damage of the other.",
+    "cryptic_rescue":
+        "One single variant creates a strong cryptic splice site where none "
+        "exists in WT. The joint variant silences that cryptic — the second "
+        "mutation suppresses the splicing aberration caused by the first.",
+    "non-epistatic":
+        "No interaction detected at this site: neither single has a meaningful "
+        "effect, the joint matches the additive expectation, or the singles "
+        "are dominant enough that the joint adds nothing new.",
+    # legacy labels (kept so old notebooks still render a sensible caption)
     "synergistic":
         "Joint variant produces a splicing change LARGER than the sum of "
-        "individual effects. Either variant on its own is partially activating; "
-        "together they reinforce the effect beyond linearity.",
-    "rescue":
-        "At least one single variant disrupts a canonical splice site; the "
-        "joint variant restores splicing close to wild-type. One mutation "
-        "cancels the splicing damage of the other.",
+        "individual effects (legacy label — see deletion_synergy / "
+        "cryptic_synergy in the current taxonomy).",
     "compounding":
-        "The joint variant has a LARGE total splicing effect, but it is fully "
-        "explained by the additive sum of the two singles. Both variants push "
-        "splicing in the same direction; together they magnify each other.",
+        "Both variants push splicing in the same direction; together they "
+        "magnify each other (legacy label).",
     "antagonistic":
-        "The joint variant has a SMALLER splicing effect than the additive "
-        "sum of singles, but does not quite return to wild-type. Partial "
-        "compensation.",
-    "non-epistatic":
-        "No interaction detected: neither single variant has a meaningful "
-        "splicing effect in this window, or the joint matches the additive "
-        "expectation perfectly without any large magnitude.",
+        "Joint variant has a SMALLER splicing effect than the additive sum of "
+        "singles (legacy label).",
 }
 
 

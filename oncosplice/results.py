@@ -73,7 +73,7 @@ class SiteEpistasis:
     event: float
     expected: float
     residual: float
-    classification: str  # 'synergistic' | 'antagonistic' | 'non-epistatic'
+    classification: str  # one of CATEGORIES in scoring.epistasis
 
     def to_dict(self) -> dict:
         return {
@@ -166,8 +166,8 @@ class DoubleVariantResult:
     distance: int
     central_position: int
 
-    # Pair-level call
-    pair_classification: str  # 'synergistic' | 'antagonistic' | 'non-epistatic'
+    # Pair-level call (see scoring.epistasis.CATEGORIES)
+    pair_classification: str
     score_residual: float     # event_score - (mut1_score + mut2_score - ref_score) on Oncosplice scores
 
     # Per-context Oncosplice scores
@@ -211,8 +211,12 @@ class DoubleVariantResult:
             "splicing_engine":      self.splicing_engine,
             "pair_classification":  self.pair_classification,
             "max_abs_residual":     self.max_abs_residual,
-            "n_synergistic_sites":  self.epistasis_summary.get("n_syn", 0),
-            "n_antagonistic_sites": self.epistasis_summary.get("n_ant", 0),
+            "n_del_syn_sites":      self.epistasis_summary.get("n_del_syn", 0),
+            "n_cryp_syn_sites":     self.epistasis_summary.get("n_cryp_syn", 0),
+            "n_rescue_sites":       self.epistasis_summary.get("n_rescue", 0),
+            "n_cryp_rescue_sites":  self.epistasis_summary.get("n_cryp_rescue", 0),
+            "max_rescue_residual":  self.epistasis_summary.get("max_rescue_residual", 0.0),
+            "max_synergy_residual": self.epistasis_summary.get("max_synergy_residual", 0.0),
             "score_ref":            self.oncosplice_scores.get("ref", 0.0),
             "score_mut1":           self.oncosplice_scores.get("mut1", 0.0),
             "score_mut2":           self.oncosplice_scores.get("mut2", 0.0),
@@ -292,7 +296,7 @@ class MultiVariantResult:
     n_variants: int
     central_position: int
 
-    pair_classification: str    # 'synergistic' | 'antagonistic' | 'non-epistatic'
+    pair_classification: str    # see scoring.epistasis.CATEGORIES
 
     site_residuals: pd.DataFrame
     """Long-format: per (position, site_type) row with ref, mut1..mutN, event,
@@ -328,8 +332,10 @@ class MultiVariantResult:
             "splicing_engine":      self.splicing_engine,
             "pair_classification":  self.pair_classification,
             "max_abs_residual":     self.max_abs_residual,
-            "n_synergistic_sites":  self.epistasis_summary.get("n_syn", 0),
-            "n_antagonistic_sites": self.epistasis_summary.get("n_ant", 0),
+            "n_del_syn_sites":      self.epistasis_summary.get("n_del_syn", 0),
+            "n_cryp_syn_sites":     self.epistasis_summary.get("n_cryp_syn", 0),
+            "n_rescue_sites":       self.epistasis_summary.get("n_rescue", 0),
+            "n_cryp_rescue_sites":  self.epistasis_summary.get("n_cryp_rescue", 0),
             "oncosplice_score_event": self.oncosplice_score_event,
         }
 

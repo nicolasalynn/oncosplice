@@ -53,7 +53,7 @@ from .results import (
 from .scoring.fingerprint import splicing_outcome_fingerprint, splicing_outcome_hash
 from .variants import Variant, VariantPair
 
-__version__ = "3.2.0"  # 5-category classification: syn / rescue / compounding / ant / non-epi
+__version__ = "3.2.0"  # 3-bucket classifier: synergistic / rescue / compounding (+ non-epistatic fallback)
 
 __all__ = [
     "OncospliceEngine",      # lazy attribute below
