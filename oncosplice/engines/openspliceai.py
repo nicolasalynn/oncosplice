@@ -75,6 +75,28 @@ class OpenSpliceAI(SplicingPredictor):
         OpenSpliceAI._model_dir = _gd()
         return OpenSpliceAI._model_dir
 
+    # Class-level cache for the loaded model ensemble + device + consts.
+    # The upstream openspliceai.predict() function reloads the 5-model ensemble
+    # from disk on every call — a ~2 second hit per inference. Caching here
+    # drops per-call time by ~10x to roughly match spliceai_pytorch.
+    _model_ensemble = None      # list of 5 torch.nn.Module
+    _model_device   = None
+    _model_consts   = None
+    _model_params   = None
+
+    @classmethod
+    def _load_ensemble_once(cls, model_dir: str):
+        """Load the 5-model ensemble + device + consts exactly once."""
+        if cls._model_ensemble is not None:
+            return
+        from openspliceai.predict import utils as _osa_utils
+        from openspliceai.predict.predict import setup_device, load_pytorch_models
+        cls._model_consts   = _osa_utils.initialize_constants(10000)
+        cls._model_device   = setup_device()
+        cls._model_ensemble, cls._model_params = load_pytorch_models(
+            model_dir, cls._model_device, cls._model_consts["SL"], 10000,
+        )
+
     # ------------------------------------------------------------------
     def predict_one(self, sequence: str) -> SplicingPrediction:
         """Run openspliceai.predict on one padded sequence.
@@ -82,26 +104,38 @@ class OpenSpliceAI(SplicingPredictor):
         Returns acceptor & donor probability arrays of length
         ``len(sequence) - 2 * context_length`` — the biological centre.
         """
-        from openspliceai.predict.predict import predict
+        import torch
+        from openspliceai.predict.predict import create_datapoints
+
         model_dir = self._ensure_model_dir()
 
-        # Suppress openspliceai's progress prints (they're verbose for short jobs).
+        # Suppress openspliceai's chatter on first-load only.
         _stdout = sys.stdout
         sys.stdout = io.StringIO()
         try:
-            y = predict(sequence, model_dir, flanking_size=10000)  # (L_out, 3)
+            self._load_ensemble_once(model_dir)
         finally:
             sys.stdout = _stdout
 
-        # y is a torch.Tensor on the prediction device.
-        y_np = y.detach().cpu().numpy() if hasattr(y, "detach") else np.asarray(y)
-        if y_np.ndim != 2 or y_np.shape[1] != 3:
-            raise RuntimeError(
-                f"unexpected openspliceai output shape: {y_np.shape}"
+        consts   = OpenSpliceAI._model_consts
+        device   = OpenSpliceAI._model_device
+        models   = OpenSpliceAI._model_ensemble
+        sequence_length = len(sequence)
+
+        # One-hot + tile (mirrors openspliceai.predict.predict)
+        X = create_datapoints(sequence, SL=consts["SL"], CL_max=consts["CL_max"])
+        X = torch.tensor(X, dtype=torch.float32).permute(0, 2, 1).to(device)
+
+        with torch.no_grad():
+            y_pred = torch.mean(
+                torch.stack([m(X).detach().cpu() for m in models]),
+                axis=0,
             )
-        # openspliceai.predict returns probabilities for the FULL input length;
-        # the predictor contract is "output length = len(seq) - 2*context".
-        # Slice off the context portion on each side.
+        y_pred = y_pred.permute(0, 2, 1).contiguous().view(-1, y_pred.shape[1])
+        y_pred = y_pred[:sequence_length, :]    # crop padding
+        y_np = y_pred.numpy()
+
+        # Crop the context flanks (predictor contract: out length = len(seq) - 2*cl)
         cl = self._CONTEXT
         if y_np.shape[0] == len(sequence):
             y_np = y_np[cl:-cl, :]
@@ -113,6 +147,6 @@ class OpenSpliceAI(SplicingPredictor):
         return SplicingPrediction(acceptor=y_np[:, 1], donor=y_np[:, 2])
 
     def predict_batch(self, sequences: Sequence[str]) -> List[SplicingPrediction]:
-        # openspliceai.predict() runs one sequence at a time; in practice each
-        # call already batches the internal windows on GPU. Looping is fine.
+        # One inference per sequence; the cached ensemble means the per-call
+        # overhead is just one-hot + 5 forward passes.
         return [self.predict_one(s) for s in sequences]
