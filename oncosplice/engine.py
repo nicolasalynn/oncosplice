@@ -608,6 +608,37 @@ class OncospliceEngine:
         )
         summary = summarize_residuals(site_residuals)
 
+        # Intron-level PSI residuals at the smallest annotated (donor, acceptor)
+        # pair that brackets all variants. Adds psi_residual + psi_mean_residual
+        # to the summary so the production scan path exposes the same intron-
+        # level signal that query_intron computes for case-study analyses.
+        try:
+            wide = site_table_wide(site_table)
+            ann_d_in_window = wide[(wide.site_type == "donor")    & wide.annotated].position.tolist()
+            ann_a_in_window = wide[(wide.site_type == "acceptor") & wide.annotated].position.tolist()
+            d_auto, a_auto = auto_derive_intron(
+                ann_d_in_window, ann_a_in_window, [v.pos for v in variants],
+            )
+            intron = query_intron_from_table(wide, d_auto, a_auto, n_variants=n)
+            summary["intron_donor_pos"]    = intron.donor_pos
+            summary["intron_acceptor_pos"] = intron.acceptor_pos
+            summary["psi_event"]           = intron.psi.get("event", float("nan"))
+            summary["psi_ref"]             = intron.psi.get("ref",   float("nan"))
+            summary["psi_expected"]        = intron.psi_expected
+            summary["psi_residual"]        = intron.psi_residual
+            summary["psi_mean_event"]      = intron.psi_mean.get("event", float("nan"))
+            summary["psi_mean_ref"]        = intron.psi_mean.get("ref",   float("nan"))
+            summary["psi_mean_expected"]   = intron.psi_mean_expected
+            summary["psi_mean_residual"]   = intron.psi_mean_residual
+        except (ValueError, KeyError):
+            # No annotated intron brackets the variants — leave intron fields absent.
+            summary["intron_donor_pos"]    = None
+            summary["intron_acceptor_pos"] = None
+            for k in ("psi_event", "psi_ref", "psi_expected", "psi_residual",
+                      "psi_mean_event", "psi_mean_ref", "psi_mean_expected",
+                      "psi_mean_residual"):
+                summary[k] = float("nan")
+
         # Protein library (joint context + optional per-single)
         isoforms_event = None
         agg_event = None
@@ -931,6 +962,9 @@ class OncospliceEngine:
                   "n_del_syn", "n_cryp_syn", "n_rescue", "n_cryp_rescue",
                   "max_rescue_residual", "max_cryptic_rescue_residual",
                   "max_deletion_synergy_residual", "max_cryptic_synergy_residual",
+                  "intron_donor_pos", "intron_acceptor_pos",
+                  "psi_event", "psi_ref", "psi_residual",
+                  "psi_mean_event", "psi_mean_ref", "psi_mean_residual",
                   "engine", "error"]
         try:
             for mut_id_list, vs, jk in iterator:
@@ -950,6 +984,25 @@ class OncospliceEngine:
                             site_table, n_variants=n, threshold=self.residual_threshold,
                         )
                         summary = summarize_residuals(sr)
+                        # Add intron-level PSI residuals (auto-derived bracketing intron)
+                        i_d_pos = i_a_pos = None
+                        psi_e = psi_r = psi_res = float("nan")
+                        psim_e = psim_r = psim_res = float("nan")
+                        try:
+                            wide = site_table_wide(site_table)
+                            ann_d_in = wide[(wide.site_type == "donor")    & wide.annotated].position.tolist()
+                            ann_a_in = wide[(wide.site_type == "acceptor") & wide.annotated].position.tolist()
+                            d_auto, a_auto = auto_derive_intron(ann_d_in, ann_a_in, [v.pos for v in vs])
+                            intron = query_intron_from_table(wide, d_auto, a_auto, n_variants=n)
+                            i_d_pos, i_a_pos = intron.donor_pos, intron.acceptor_pos
+                            psi_e   = intron.psi.get("event", float("nan"))
+                            psi_r   = intron.psi.get("ref",   float("nan"))
+                            psi_res = intron.psi_residual
+                            psim_e  = intron.psi_mean.get("event", float("nan"))
+                            psim_r  = intron.psi_mean.get("ref",   float("nan"))
+                            psim_res = intron.psi_mean_residual
+                        except (ValueError, KeyError):
+                            pass
                         out_rows.append({
                             "construct_id":           cid,
                             "n_variants":             n,
@@ -964,6 +1017,14 @@ class OncospliceEngine:
                             "max_cryptic_rescue_residual":   summary["max_cryptic_rescue_residual"],
                             "max_deletion_synergy_residual": summary["max_deletion_synergy_residual"],
                             "max_cryptic_synergy_residual":  summary["max_cryptic_synergy_residual"],
+                            "intron_donor_pos":       i_d_pos,
+                            "intron_acceptor_pos":    i_a_pos,
+                            "psi_event":              psi_e,
+                            "psi_ref":                psi_r,
+                            "psi_residual":           psi_res,
+                            "psi_mean_event":         psim_e,
+                            "psi_mean_ref":           psim_r,
+                            "psi_mean_residual":      psim_res,
                             "engine":                 self.splicing_engine,
                             "error":                  None,
                         })
