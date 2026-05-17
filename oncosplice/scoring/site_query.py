@@ -48,19 +48,35 @@ class SiteQueryResult:
 
 @dataclass(frozen=True)
 class IntronQueryResult:
-    """Per-context acceptor + donor probabilities, PSI estimate, and residual.
+    """Per-context acceptor + donor probabilities + two PSI estimates + residuals.
 
-    PSI(ctx) = p_acceptor(ctx) × p_donor(ctx)
-    psi_expected = Σ PSI(mut_i) − (N−1)·PSI(ref)
-    psi_residual = PSI(event) − psi_expected
+    Two PSI conventions are computed at every call — pick whichever the
+    downstream analysis wants:
+
+    ``psi``        — independence-product PSI: ``p_acceptor(ctx) × p_donor(ctx)``.
+                     Bounded [0, 1]; conservative when both sites must fire.
+    ``psi_mean``   — mean per-site activity: ``(p_acceptor(ctx) + p_donor(ctx)) / 2``.
+                     Matches the legacy figure1 exon_prob formula (modulo the
+                     cryptic-residual subtraction that contributes negligibly
+                     on benchmark data) and correlates ~2× higher than ``psi``
+                     against the FAS Julien 2016 experimental epistasis.
+
+    Each PSI has its own additive-null residual:
+        psi_expected      = Σ PSI(mut_i) − (N−1)·PSI(ref)
+        psi_residual      = PSI(event) − psi_expected
+        psi_mean_expected = Σ PSI_mean(mut_i) − (N−1)·PSI_mean(ref)
+        psi_mean_residual = PSI_mean(event) − psi_mean_expected
     """
     donor_pos: int
     acceptor_pos: int
     donor:    SiteQueryResult       # per-context donor probabilities
     acceptor: SiteQueryResult       # per-context acceptor probabilities
-    psi:      dict                  # {'ref': acc·don, …}; NaN where either side missing
+    psi:      dict                  # acc × don PSI per context
     psi_expected: float
     psi_residual: float
+    psi_mean:      dict             # (acc + don) / 2 per context
+    psi_mean_expected: float
+    psi_mean_residual: float
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -136,27 +152,39 @@ def query_intron_from_table(
     acceptor_pos: int,
     n_variants: int,
 ) -> IntronQueryResult:
-    """Read both ends of an intron and derive PSI + PSI residual.
+    """Read both ends of an intron, derive both PSI estimates and their residuals.
 
-    PSI ≈ acceptor_prob × donor_prob (independence approximation).
+    Returns:
+      psi[ctx]       = p_acceptor(ctx) × p_donor(ctx)         (independence product)
+      psi_mean[ctx]  = (p_acceptor(ctx) + p_donor(ctx)) / 2   (legacy figure1 exon_prob)
     """
     d = query_site_from_table(site_table_wide, donor_pos,    "donor",    n_variants)
     a = query_site_from_table(site_table_wide, acceptor_pos, "acceptor", n_variants)
     keys = _context_keys(n_variants)
-    psi = {k: d.contexts[k] * a.contexts[k] for k in keys}
 
-    psi_ref   = psi["ref"]
-    psi_event = psi["event"]
-    psi_expected = sum(psi[f"mut{i+1}"] for i in range(n_variants)) - (n_variants - 1) * psi_ref
-    psi_residual = psi_event - psi_expected
+    psi      = {k: d.contexts[k] * a.contexts[k]       for k in keys}
+    psi_mean = {k: (d.contexts[k] + a.contexts[k]) / 2 for k in keys}
+
+    def _residual(p):
+        ref_p   = p["ref"]
+        event_p = p["event"]
+        exp = sum(p[f"mut{i+1}"] for i in range(n_variants)) - (n_variants - 1) * ref_p
+        return float(exp), float(event_p - exp)
+
+    psi_expected,      psi_residual      = _residual(psi)
+    psi_mean_expected, psi_mean_residual = _residual(psi_mean)
+
     return IntronQueryResult(
         donor_pos=int(donor_pos),
         acceptor_pos=int(acceptor_pos),
         donor=d,
         acceptor=a,
         psi=psi,
-        psi_expected=float(psi_expected),
-        psi_residual=float(psi_residual),
+        psi_expected=psi_expected,
+        psi_residual=psi_residual,
+        psi_mean=psi_mean,
+        psi_mean_expected=psi_mean_expected,
+        psi_mean_residual=psi_mean_residual,
     )
 
 
