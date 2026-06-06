@@ -38,8 +38,9 @@ def make_wide_splicing_df():
     data = np.array([
         # pos 100: annotated donor that survives
         [True,  0.95, 0.92, 0.94, 0.91,   False, 0.0, 0.0, 0.0, 0.0],
-        # pos 105: cryptic donor discovered jointly (synergy)
-        [False, 0.05, 0.10, 0.12, 0.85,   False, 0.0, 0.0, 0.0, 0.0],
+        # pos 105: cryptic donor discovered jointly (cryptic_synergy):
+        # absent in ref AND in either single (≤ LOW_BAND), created only in the joint.
+        [False, 0.05, 0.03, 0.04, 0.85,   False, 0.0, 0.0, 0.0, 0.0],
         # pos 200: annotated acceptor — antagonism (each mut breaks it, joint rescues)
         [False, 0.0, 0.0, 0.0, 0.0,        True,  0.90, 0.30, 0.30, 0.85],
         # pos 205: cryptic acceptor — additive (no epistasis)
@@ -75,11 +76,11 @@ def test_compute_site_residuals_signs_and_classifications():
     long = extract_site_table(df, contexts=["ref", "mut1", "mut2", "event"])
     res = compute_site_residuals(long, threshold=0.25)
 
-    # Pos 105: cryptic donor that *appears* in joint context only.
-    # ref=0.05, mut1=0.10, mut2=0.12, event=0.85
-    # delta_event=0.80, expected_delta=0.12 ⇒ |0.80|>|0.12| ⇒ synergistic
+    # Pos 105: cryptic donor created only in the joint context.
+    # ref=0.05, mut1=0.03, mut2=0.04 (both ≤ LOW_BAND ⇒ site absent in singles),
+    # event=0.85 ⇒ expected=0.02, residual=0.83 ⇒ cryptic_synergy.
     row_105 = res[(res.position == 105) & (res.site_type == "donor")].iloc[0]
-    assert row_105.classification == "synergistic"
+    assert row_105.classification == "cryptic_synergy"
     assert abs(row_105.residual) > 0.25
 
     # Pos 200: rescue at the annotated acceptor.
@@ -99,8 +100,9 @@ def test_classify_pair_and_summary():
     long = extract_site_table(df, contexts=["ref", "mut1", "mut2", "event"])
     res = compute_site_residuals(long, threshold=0.25)
     pair_cls = classify_pair(res)
-    # 3-bucket classifier: synergistic > rescue > compounding > non-epistatic.
-    assert pair_cls in {"synergistic", "rescue", "compounding"}
+    # 4-class mechanism classifier picks the top-priority epistatic site
+    # (here pos 105 = cryptic_synergy, pos 200 = rescue).
+    assert pair_cls in {"rescue", "cryptic_rescue", "deletion_synergy", "cryptic_synergy"}
     summary = summarize_residuals(res)
     assert summary["n_sites"] == len(res)
     assert summary["pair_classification"] == pair_cls
