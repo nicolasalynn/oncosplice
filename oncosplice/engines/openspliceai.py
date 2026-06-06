@@ -52,26 +52,16 @@ class OpenSpliceAI(SplicingPredictor):
         if self._model_dir_override is not None:
             OpenSpliceAI._model_dir = str(self._model_dir_override)
             return OpenSpliceAI._model_dir
-        # Centralised resolver: oncosplice/weights → user cache → bundled,
-        # auto-downloading from the Hub on a miss.
+        # env override → ~/.oncosplice cache → HuggingFace auto-download.
         from ..weights import ensure_dir as _ensure
         d = _ensure("openspliceai")
-        if d is not None:
-            OpenSpliceAI._model_dir = str(d)
-            return OpenSpliceAI._model_dir
-        # Fallback: ask geney for the same resolver
-        try:
-            from geney.splicing.engines import _get_openspliceai_model_dir as _gd
-        except ImportError:
-            try:
-                from geney.engines import _get_openspliceai_model_dir as _gd
-            except ImportError:
-                raise RuntimeError(
-                    "OpenSpliceAI weights not found. Run "
-                    "`oncosplice-download-weights openspliceai` or set "
-                    "ONCOSPLICE_WEIGHTS_DIR / OPENSPLICEAI_MODEL_DIR."
-                )
-        OpenSpliceAI._model_dir = _gd()
+        if d is None:
+            raise RuntimeError(
+                "OpenSpliceAI weights not found and could not be downloaded "
+                "from the Hub. Check network / HF access, or run "
+                "`oncosplice-download-weights openspliceai`."
+            )
+        OpenSpliceAI._model_dir = str(d)
         return OpenSpliceAI._model_dir
 
     # Class-level cache for the loaded model ensemble + device + consts.

@@ -86,17 +86,7 @@ class Pangolin(SplicingPredictor):
             return self._dir_override
         from ..weights import resolve_dir as _resolve
         d = _resolve("pangolin")
-        if d is not None:
-            return Path(d)
-        # Backward-compat: an upstream `pangolin` package installed locally.
-        try:
-            from pkg_resources import resource_filename
-            cand = Path(resource_filename("pangolin", "models"))
-            if cand.exists() and any(cand.glob("final.*.3")):
-                return cand
-        except Exception:
-            pass
-        return None
+        return Path(d) if d is not None else None
 
     def _pick_device(self):
         import sys
@@ -128,10 +118,9 @@ class Pangolin(SplicingPredictor):
             weights_dir = ensure_dir("pangolin")  # auto-downloads on a miss
         if weights_dir is None:
             raise RuntimeError(
-                "Pangolin weights not found. Run "
-                "`oncosplice-download-weights pangolin` or set "
-                "ONCOSPLICE_WEIGHTS_DIR. Looked in the oncosplice weight cache "
-                "and any locally-installed `pangolin` package."
+                "Pangolin weights not found and could not be downloaded from "
+                "the Hub. Check network / HF access, or run "
+                "`oncosplice-download-weights pangolin`."
             )
 
         Pangolin_cls = build_pangolin_class()
