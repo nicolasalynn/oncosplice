@@ -2,40 +2,31 @@
 
 Spliceformer is a transformer-based splice-site predictor with a 40 kb input
 context (CL_max=40000 → 20,000 bp on each side of the prediction region).
-It is distributed as a research GitHub repo
-(https://github.com/benniatli/Spliceformer); the model class lives in
-``Code/src/model.py`` and pre-trained weights are PyTorch state dicts in
-``Results/PyTorch_Models/``.
+
+Self-contained: the model definition is vendored (MIT) at
+:mod:`oncosplice.engines._vendor.spliceformer`, and the released checkpoint
+ensemble is fetched into the oncosplice weight cache. No GitHub clone or
+``SPLICEFORMER_REPO_DIR`` is required.
 
 This adapter:
 
-1. Locates the cloned Spliceformer repo (env ``SPLICEFORMER_REPO_DIR`` or
-   ``~/Documents/phd/libraries/Spliceformer``).
-2. Adds its ``Code/`` directory to ``sys.path`` so ``from src.model import
-   SpliceFormer`` works.
-3. Loads the 10-checkpoint 45k transformer ensemble
-   (``transformer_encoder_45k_*``) and runs them at inference time.
-4. Returns ``(acceptor, donor)`` probability arrays sliced to the biological
+1. Resolves the weight directory via the oncosplice weight resolver
+   (``~/.oncosplice/weights/spliceformer/`` etc.).
+2. Loads the transformer-encoder checkpoint ensemble (files matching
+   ``transformer_encoder_45k_*``) using the vendored ``SpliceFormer`` class.
+3. Returns ``(acceptor, donor)`` probability arrays sliced to the biological
    region, matching the contract of the other adapters.
 """
 from __future__ import annotations
 
 import os
-import sys
-from pathlib import Path
 from typing import List, Optional, Sequence
 
 import numpy as np
 
 from .base import SplicingPrediction, SplicingPredictor
 
-_DEFAULT_REPO = Path.home() / "Documents/phd/libraries/Spliceformer"
 _DEFAULT_GLOB = "transformer_encoder_45k_*"
-
-
-def _default_repo_dir() -> Path:
-    return Path(os.environ.get("SPLICEFORMER_REPO_DIR", _DEFAULT_REPO))
-
 
 _IN_MAP = np.asarray(
     [[0, 0, 0, 0],
@@ -55,15 +46,15 @@ class Spliceformer(SplicingPredictor):
 
     _models = None
     _device = None
-    _SpliceFormer = None  # cached model class
 
     def __init__(
         self,
-        repo_dir: Optional[str | os.PathLike] = None,
+        weights_dir: Optional[str | os.PathLike] = None,
         device: Optional[str] = None,
         model_glob: str = _DEFAULT_GLOB,
     ):
-        self.repo_dir = Path(repo_dir) if repo_dir else _default_repo_dir()
+        from pathlib import Path
+        self._dir_override = Path(weights_dir) if weights_dir else None
         self._device_override = device
         self._model_glob = model_glob
 
@@ -72,38 +63,33 @@ class Spliceformer(SplicingPredictor):
         return self._CONTEXT
 
     def is_available(self) -> bool:
-        if not self.repo_dir.exists():
-            return False
-        if not (self.repo_dir / "Code" / "src" / "model.py").exists():
-            return False
-        if not any((self.repo_dir / "Results" / "PyTorch_Models").glob(self._model_glob)):
-            return False
         try:
             import einops  # noqa: F401  (required by SpliceFormer)
             import torch  # noqa: F401
-            return True
         except ImportError:
             return False
+        return self._resolve_weights_dir() is not None
 
     # ------------------------------------------------------------------
-    def _ensure_class(self):
-        """Import the SpliceFormer class from the cloned repo. Idempotent."""
-        if Spliceformer._SpliceFormer is not None:
-            return Spliceformer._SpliceFormer
-        code_dir = str(self.repo_dir / "Code")
-        if code_dir not in sys.path:
-            sys.path.insert(0, code_dir)
-        from src.model import SpliceFormer  # type: ignore
-        Spliceformer._SpliceFormer = SpliceFormer
-        return SpliceFormer
+    def _resolve_weights_dir(self):
+        from pathlib import Path
+        if self._dir_override is not None and self._dir_override.exists():
+            return self._dir_override
+        from ..weights import resolve_dir as _resolve
+        d = _resolve("spliceformer")
+        if d is not None and any(Path(d).glob(self._model_glob)):
+            return Path(d)
+        return None
 
     def _pick_device(self):
+        import sys
+
         import torch
         if self._device_override:
             return torch.device(self._device_override)
         if torch.cuda.is_available():
             return torch.device("cuda")
-        if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        if sys.platform == "darwin" and getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
             try:
                 torch.tensor([1.0], device="mps")
                 return torch.device("mps")
@@ -117,18 +103,22 @@ class Spliceformer(SplicingPredictor):
 
         import torch
 
-        if not self.is_available():
+        from ._vendor.spliceformer import SpliceFormer
+
+        weights_dir = self._resolve_weights_dir()
+        if weights_dir is None and self._dir_override is None:
+            from ..weights import ensure_dir
+            weights_dir = ensure_dir("spliceformer")  # auto-downloads on a miss
+        if weights_dir is None:
             raise RuntimeError(
-                f"Spliceformer is not set up. Expected:\n"
-                f"  - repo at {self.repo_dir}\n"
-                f"  - Code/src/model.py with `class SpliceFormer`\n"
-                f"  - checkpoints matching {self._model_glob} in Results/PyTorch_Models/\n"
-                f"  - python deps: torch, einops"
+                "Spliceformer weights not found. Run "
+                "`oncosplice-download-weights spliceformer` or set "
+                "ONCOSPLICE_WEIGHTS_DIR. Expected checkpoint files matching "
+                f"{self._model_glob!r} in the spliceformer weight directory."
             )
 
-        SpliceFormer = self._ensure_class()
         device = self._pick_device()
-        weight_paths = sorted((self.repo_dir / "Results/PyTorch_Models").glob(self._model_glob))
+        weight_paths = sorted(weights_dir.glob(self._model_glob))
 
         models = []
         for wp in weight_paths:
@@ -139,14 +129,14 @@ class Spliceformer(SplicingPredictor):
             try:
                 m.load_state_dict(cleaned, strict=True)
             except RuntimeError:
-                # Some checkpoints may be slightly mismatched (e.g. different policy
-                # head). Fall back to non-strict; SpliceFormer's prediction head is
+                # Some checkpoints may be slightly mismatched (e.g. a different
+                # policy head). Fall back to non-strict; the prediction head is
                 # what we need and survives a partial load.
                 m.load_state_dict(cleaned, strict=False)
             m.eval()
             models.append(m)
         if not models:
-            raise RuntimeError(f"No Spliceformer weights matched {self._model_glob}")
+            raise RuntimeError(f"No Spliceformer weights matched {self._model_glob} in {weights_dir}")
         Spliceformer._models = models
         Spliceformer._device = device
         return models, device
@@ -197,17 +187,3 @@ class Spliceformer(SplicingPredictor):
                 )
             results.append(SplicingPrediction(acceptor=y0[1, :], donor=y0[2, :]))
         return results
-
-    # ------------------------------------------------------------------
-    @staticmethod
-    def write_model_shim(*args, **kwargs):  # pragma: no cover
-        """Deprecated — kept for backwards compatibility. The adapter now
-        imports ``SpliceFormer`` directly from ``Code/src/model.py`` in the
-        cloned repo. No manual shim file is required.
-        """
-        import warnings
-        warnings.warn(
-            "write_model_shim is no longer needed; Spliceformer is loaded "
-            "from Code/src/model.py automatically.",
-            DeprecationWarning, stacklevel=2,
-        )

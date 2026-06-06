@@ -8,12 +8,26 @@ version = "3.2.0"
 description = "Sequence-level pipeline for splicing-epistasis analysis of single, double, and N-variant constructs"
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [{ name = "Nicolas Lynn" }]
+authors = [{ name = "Nicolas Lynn", email = "nicolasalynn@gmail.com" }]
 license = { text = "MIT" }
 keywords = [
   "splicing", "epistasis", "oncosplice",
   "spliceai", "openspliceai", "pangolin", "spliceformer",
-  "cancer-genomics",
+  "cancer-genomics", "bioinformatics", "rna-splicing",
+]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Healthcare Industry",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+  "Topic :: Scientific/Engineering :: Medical Science Apps.",
+  "Typing :: Typed",
 ]
 
 dependencies = [
@@ -24,9 +38,14 @@ dependencies = [
   "matplotlib>=3.9",
   "biopython>=1.84",
   "seqmat>=1.3",
+  "huggingface_hub>=0.20",   # weight download/resolve from the Hub
 ]
 
 # Per-engine optional extras — install only the splice-site backend you need.
+# Every backend is self-contained: the model code is either independently
+# implemented or vendored (MIT) inside oncosplice, and weights are fetched from
+# the Hugging Face Hub on first use. No GitHub clones required.
+#
 # Note: spliceai_pytorch is the recommended path for the original SpliceAI
 # weights (numerically identical to Keras, ~2.5× faster, no TF dependency).
 # The spliceai_keras extra is kept ONLY as the reference implementation for
@@ -34,12 +53,12 @@ dependencies = [
 [project.optional-dependencies]
 # ── Splice-site engine backends (pick the one you want, or `all`) ────────────
 openspliceai     = ["torch>=2.0", "openspliceai"]
-spliceai_pytorch = ["torch>=2.0"]                   # uses bundled translated weights
-pangolin         = ["torch>=2.0"]                   # install Pangolin from github separately
-spliceformer     = ["torch>=2.0", "transformers", "einops"]
+spliceai_pytorch = ["torch>=2.0"]                   # SpliceAI weights, oncosplice's PyTorch arch
+pangolin         = ["torch>=2.0"]                   # oncosplice's MIT re-impl of the Pangolin arch
+spliceformer     = ["torch>=2.0", "einops"]         # vendored (MIT) Spliceformer model
 spliceai_keras   = ["tensorflow>=2.8", "spliceai"]  # reference / verification only
 all              = [                                # all 4 production engines
-  "torch>=2.0", "openspliceai", "transformers", "einops",
+  "torch>=2.0", "openspliceai", "einops",
 ]
 
 # ── Protein-library / Oncosplice protein-divergence score (optional) ───────
@@ -49,16 +68,37 @@ all              = [                                # all 4 production engines
 protein          = ["geney>=2.0"]
 
 dev              = ["pytest>=7", "pytest-cov", "ruff"]
+docs             = [
+  "mkdocs-material>=9.5",
+  "mkdocstrings[python]>=0.24",
+  "pymdown-extensions>=10",
+]
 
 [project.scripts]
 oncosplice-download-weights = "oncosplice.weights:_cli"
 
 [project.urls]
-homepage = "https://github.com/nicolasalynn/oncosplice"
+Homepage      = "https://github.com/nicolasalynn/oncosplice"
+Documentation = "https://nicolasalynn.github.io/oncosplice"
+Repository    = "https://github.com/nicolasalynn/oncosplice"
+Issues        = "https://github.com/nicolasalynn/oncosplice/issues"
+Changelog     = "https://github.com/nicolasalynn/oncosplice/blob/main/CHANGELOG.md"
+
+[tool.ruff]
+# Vendored third-party model code is kept verbatim; don't lint it.
+extend-exclude = ["oncosplice/engines/_vendor"]
 
 [tool.setuptools]
-packages = ["oncosplice", "oncosplice.scoring", "oncosplice.engines", "oncosplice.weights"]
+packages = [
+  "oncosplice",
+  "oncosplice.scoring",
+  "oncosplice.engines",
+  "oncosplice.engines._vendor",
+  "oncosplice.engines._vendor.spliceformer",
+  "oncosplice.weights",
+]
 
 [tool.setuptools.package-data]
 oncosplice = ["py.typed"]
 "oncosplice.weights" = ["manifest.json"]
+"oncosplice.engines._vendor.spliceformer" = ["LICENSE"]

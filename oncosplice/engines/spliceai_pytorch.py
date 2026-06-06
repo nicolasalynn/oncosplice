@@ -210,6 +210,9 @@ class SpliceAIPyTorch(SplicingPredictor):
 
         import torch
         weights_dir = self._resolve_weights_dir()
+        if weights_dir is None and self._dir_override is None:
+            from ..weights import ensure_dir
+            weights_dir = ensure_dir("spliceai_pytorch")  # auto-downloads on a miss
         if weights_dir is None:
             raise RuntimeError(
                 "SpliceAI-PyTorch weights not found. Looked in "

@@ -88,7 +88,7 @@ def get_predictor(name: str, **kwargs) -> SplicingPredictor:
         Engine identifier. See module docstring for accepted values.
     **kwargs
         Forwarded to the predictor constructor (``device``, ``model_dir``,
-        ``repo_dir`` …). Ignored for ensemble strings.
+        ``weights_dir`` …). Ignored for ensemble strings.
     """
     name = name.strip()
 

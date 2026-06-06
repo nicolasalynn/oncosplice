@@ -16,8 +16,6 @@ import io
 import sys
 from typing import List, Sequence
 
-import numpy as np
-
 from .base import SplicingPrediction, SplicingPredictor
 
 
@@ -54,9 +52,10 @@ class OpenSpliceAI(SplicingPredictor):
         if self._model_dir_override is not None:
             OpenSpliceAI._model_dir = str(self._model_dir_override)
             return OpenSpliceAI._model_dir
-        # Centralised resolver: oncosplice/weights → user cache → bundled
-        from ..weights import resolve_dir as _resolve
-        d = _resolve("openspliceai")
+        # Centralised resolver: oncosplice/weights → user cache → bundled,
+        # auto-downloading from the Hub on a miss.
+        from ..weights import ensure_dir as _ensure
+        d = _ensure("openspliceai")
         if d is not None:
             OpenSpliceAI._model_dir = str(d)
             return OpenSpliceAI._model_dir
@@ -90,7 +89,7 @@ class OpenSpliceAI(SplicingPredictor):
         if cls._model_ensemble is not None:
             return
         from openspliceai.predict import utils as _osa_utils
-        from openspliceai.predict.predict import setup_device, load_pytorch_models
+        from openspliceai.predict.predict import load_pytorch_models, setup_device
         cls._model_consts   = _osa_utils.initialize_constants(10000)
         cls._model_device   = setup_device()
         cls._model_ensemble, cls._model_params = load_pytorch_models(

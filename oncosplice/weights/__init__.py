@@ -1,19 +1,24 @@
 """Centralised model-weight management for the oncosplice predictors.
 
-Every adapter resolves its weight directory through :func:`resolve_dir`,
-which checks (in order):
+Weights are distributed from a single Hugging Face Hub repository,
+:data:`HF_REPO_ID`, with one sub-folder per model
+(``openspliceai/``, ``spliceai_pytorch/``, ``pangolin/``, ``spliceformer/`` …).
+They are downloaded into a user-cache and resolved from there at runtime.
+
+Every adapter resolves its weight directory through :func:`resolve_dir`
+(cheap, no network) and, at model-load time, through :func:`ensure_dir`
+(resolves, and auto-downloads on a miss unless disabled). :func:`resolve_dir`
+checks, in order:
 
 1. ``$ONCOSPLICE_WEIGHTS_DIR/<model_name>/``  — explicit override.
 2. ``~/.oncosplice/weights/<model_name>/``     — user-cache (populated by the
-   ``oncosplice-download-weights`` CLI).
-3. ``<package>/weights/<model_name>/``          — bundled with the wheel.
-4. Falls back to the upstream package's resource_filename location
-   (``spliceai/models/``, ``openspliceai/models/``, ``pangolin/models/``).
+   ``oncosplice-download-weights`` CLI or by auto-download).
+3. ``<package>/weights/<model_name>/``          — bundled with the wheel
+   (only used for very small vendored models).
 
-The user-cache scheme is the recommended one for distribution: PyPI's
-60 MB-per-file limit makes shipping the full ~500 MB of model weights in the
-wheel impractical, but ``pip install oncosplice && oncosplice-download-weights``
-gives the same one-command experience.
+Auto-download is on by default (mirroring the Hugging Face / torch.hub
+experience); set ``ONCOSPLICE_AUTO_DOWNLOAD=0`` to require an explicit
+``oncosplice-download-weights`` step instead (useful for offline / CI).
 """
 from __future__ import annotations
 
@@ -21,20 +26,21 @@ import argparse
 import json
 import os
 import sys
-import urllib.request
-import zipfile
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# Package-bundled weights (if anyone wants to vendor a small model)
+#: Hugging Face Hub repo hosting every model's weights (one sub-folder each).
+HF_REPO_ID = os.environ.get("ONCOSPLICE_HF_REPO", "nicolynnvila/oncosplice-weights")
+
+# Package-bundled weights (only viable for very small vendored models).
 _PKG_WEIGHTS_DIR = Path(__file__).parent
 
-# User cache
+# User cache.
 _USER_WEIGHTS_DIR = Path.home() / ".oncosplice" / "weights"
 
 
 def manifest_path() -> Path:
-    """Path to the JSON manifest of (model_name → download URL + filenames)."""
+    """Path to the JSON manifest of model metadata (sub-folder, license, …)."""
     return _PKG_WEIGHTS_DIR / "manifest.json"
 
 
@@ -53,11 +59,23 @@ def load_manifest() -> Dict[str, dict]:
     return {k: v for k, v in raw.items() if not k.startswith("_")}
 
 
-def resolve_dir(model_name: str, upstream_fallback: Optional[Path] = None) -> Optional[Path]:
-    """Resolve the weight directory for ``model_name``.
+def _subfolder(model_name: str) -> str:
+    """The repo sub-folder for a model (defaults to the model name)."""
+    entry = load_manifest().get(model_name, {})
+    return entry.get("subfolder", model_name)
 
-    Returns the first path that exists, or ``upstream_fallback`` if nothing
-    else is present. Returns ``None`` if no weights can be found anywhere.
+
+def _auto_download_enabled() -> bool:
+    return os.environ.get("ONCOSPLICE_AUTO_DOWNLOAD", "1").strip().lower() not in (
+        "0", "false", "no", "off", "",
+    )
+
+
+def resolve_dir(model_name: str, upstream_fallback: Optional[Path] = None) -> Optional[Path]:
+    """Resolve the weight directory for ``model_name`` without any network I/O.
+
+    Returns the first existing, non-empty path, or ``upstream_fallback`` if
+    nothing else is present. Returns ``None`` if no weights are found anywhere.
     """
     override = os.environ.get("ONCOSPLICE_WEIGHTS_DIR")
     candidates: List[Path] = []
@@ -73,46 +91,80 @@ def resolve_dir(model_name: str, upstream_fallback: Optional[Path] = None) -> Op
     return None
 
 
+def ensure_dir(model_name: str, *, auto_download: Optional[bool] = None) -> Optional[Path]:
+    """Resolve the weight directory, downloading from the Hub on a miss.
+
+    Call this at model-load time (not in ``is_available``): a miss triggers a
+    download unless auto-download is disabled. ``auto_download=None`` (default)
+    consults ``ONCOSPLICE_AUTO_DOWNLOAD``.
+    """
+    d = resolve_dir(model_name)
+    if d is not None:
+        return d
+    do_download = _auto_download_enabled() if auto_download is None else auto_download
+    if do_download and model_name in load_manifest():
+        print(
+            f"[oncosplice] weights for {model_name!r} not found locally; "
+            f"downloading from {HF_REPO_ID} (set ONCOSPLICE_AUTO_DOWNLOAD=0 to disable)…"
+        )
+        download_model(model_name)
+        return resolve_dir(model_name)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Downloader
 # ---------------------------------------------------------------------------
 
 def download_model(model_name: str, *, force: bool = False, verbose: bool = True) -> Path:
-    """Download model weights to ``~/.oncosplice/weights/<model_name>/``.
+    """Download a model's weights from the Hub into the user cache.
 
-    Reads URL + filenames from ``manifest.json``. If the manifest doesn't
-    mention this model, the function raises with a helpful message.
+    Files land in ``~/.oncosplice/weights/<model_name>/`` (the repo sub-folder
+    is mapped to the cache sub-folder of the same name).
     """
     manifest = load_manifest()
     if model_name not in manifest:
         raise KeyError(
-            f"No download instructions for {model_name!r} in manifest. "
-            f"Known models: {list(manifest)}. Add an entry to "
-            f"{manifest_path()} or place weights manually in "
+            f"Unknown model {model_name!r}. Known models: {sorted(manifest)}. "
+            f"Add an entry to {manifest_path()} or place weights manually in "
             f"{_USER_WEIGHTS_DIR / model_name}/"
         )
-    entry = manifest[model_name]
-    target_dir = _USER_WEIGHTS_DIR / model_name
-    target_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        from huggingface_hub import snapshot_download
+    except ImportError as e:
+        raise RuntimeError(
+            "huggingface_hub is required to download weights "
+            "(`pip install huggingface_hub`)."
+        ) from e
 
-    files: List[dict] = entry.get("files", [])
-    for f in files:
-        url = f["url"]
-        fname = f.get("filename") or Path(url).name
-        dst = target_dir / fname
-        if dst.exists() and not force:
-            if verbose:
-                print(f"  ✓ {fname} (already present)")
-            continue
-        if verbose:
-            print(f"  ↓ {fname} ← {url}")
-        with urllib.request.urlopen(url) as r, open(dst, "wb") as out:
-            out.write(r.read())
-        if fname.endswith(".zip") and entry.get("auto_unzip", True):
-            with zipfile.ZipFile(dst, "r") as zf:
-                zf.extractall(target_dir)
-            dst.unlink()
-    return target_dir
+    repo_id = manifest[model_name].get("repo_id", HF_REPO_ID)
+    subfolder = _subfolder(model_name)
+    target_root = _USER_WEIGHTS_DIR
+    target_root.mkdir(parents=True, exist_ok=True)
+
+    if verbose:
+        print(f"  ↓ {repo_id}:{subfolder}/  →  {target_root / model_name}")
+
+    # Pull just this model's sub-folder, copying real files (not symlinks) into
+    # the cache so the layout matches resolve_dir's expectations.
+    snapshot_download(
+        repo_id=repo_id,
+        allow_patterns=[f"{subfolder}/*"],
+        local_dir=str(target_root),
+        force_download=force,
+    )
+    # If the repo sub-folder name differs from our cache name, normalise it.
+    src = target_root / subfolder
+    dst = target_root / model_name
+    if src != dst and src.exists():
+        dst.mkdir(parents=True, exist_ok=True)
+        for f in src.iterdir():
+            f.rename(dst / f.name)
+        try:
+            src.rmdir()
+        except OSError:
+            pass
+    return dst
 
 
 def download_all(*, force: bool = False, verbose: bool = True) -> Dict[str, Path]:
@@ -120,8 +172,8 @@ def download_all(*, force: bool = False, verbose: bool = True) -> Dict[str, Path
     manifest = load_manifest()
     if not manifest:
         raise RuntimeError(
-            f"manifest.json is empty. Populate {manifest_path()} with model "
-            f"entries before running download_all()."
+            f"manifest.json is empty. Populate {manifest_path()} before "
+            f"running download_all()."
         )
     out: Dict[str, Path] = {}
     for name in manifest:
@@ -132,10 +184,10 @@ def download_all(*, force: bool = False, verbose: bool = True) -> Dict[str, Path
 
 
 def status() -> Dict[str, dict]:
-    """Return per-model availability: where weights resolve from + size on disk."""
+    """Return per-model availability: where weights resolve from + file count."""
     manifest = load_manifest()
     rows = {}
-    for name in manifest or ("openspliceai", "spliceai_keras", "pangolin", "spliceformer"):
+    for name in manifest or ("openspliceai", "spliceai_pytorch", "pangolin", "spliceformer"):
         d = resolve_dir(name)
         rows[name] = {
             "resolved": str(d) if d else None,
@@ -150,12 +202,16 @@ def status() -> Dict[str, dict]:
 # ---------------------------------------------------------------------------
 
 def _cli(argv: Optional[List[str]] = None) -> int:
-    p = argparse.ArgumentParser(prog="oncosplice-download-weights",
-                                description="Download model weights for the oncosplice splicing engines.")
+    p = argparse.ArgumentParser(
+        prog="oncosplice-download-weights",
+        description=f"Download model weights for the oncosplice splicing engines "
+                    f"(from {HF_REPO_ID}).",
+    )
     sub = p.add_subparsers(dest="cmd", required=False)
     p_dl = sub.add_parser("download", help="Download one or all models.")
     p_dl.add_argument("model", nargs="?", default="all",
-                      help="Model name (openspliceai | spliceai_keras | pangolin | spliceformer | all). Default: all.")
+                      help="Model name (openspliceai | spliceai_pytorch | "
+                           "spliceai_keras | pangolin | spliceformer | all). Default: all.")
     p_dl.add_argument("--force", action="store_true", help="Re-download even if present.")
     sub.add_parser("status", help="Show where each model resolves from.")
     args = p.parse_args(argv)
