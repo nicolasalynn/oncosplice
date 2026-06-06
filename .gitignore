@@ -47,3 +47,7 @@ env/
 # weight blobs (too big for git, downloaded via oncosplice-download-weights)
 oncosplice/weights/*/
 !oncosplice/weights/manifest.json
+
+# mkdocs build output (built fresh by CI)
+site/
+.ruff_cache/

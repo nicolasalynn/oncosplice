@@ -54,4 +54,15 @@ jobs:
           pytest tests/test_scoring.py tests/test_variants.py -v \
             --cov=oncosplice.scoring \
             --cov=oncosplice.variants \
-            --cov-report=term-missing
+            --cov-report=term-missing \
+            --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        # Only push coverage once per CI run (the 3.12 leg) to avoid duplicates.
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: unit
+          fail_ci_if_error: false  # don't break CI on a codecov outage
+          token: ${{ secrets.CODECOV_TOKEN }}  # required for private repos; optional for public
