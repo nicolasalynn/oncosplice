@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.2.1 — 2026-06-06
+
+### Fixed (correctness)
+- **Fingerprint mechanism tags** (`splicing_outcome_fingerprint` / `splicing_outcome_hash`) referenced pre-rewrite class names (`n_syn`/`n_compound`/`n_ant`) that no longer exist, so only `rescue` ever appeared. Now mapped to the 4-class keys (`dsyn`/`csyn`/`res`/`cres`). **Note:** fingerprint strings and their hashes change accordingly.
+- `max_synergy_residual` in pair summaries was always `0.0` (the key was never emitted) — now populated as `max(deletion_synergy, cryptic_synergy)`.
+- `classify_dataframe` crashed merging on `construct_id` when `scan()` early-returned a column-less empty frame — now surfaces per-construct error rows instead.
+
+### Engine robustness
+- Spliceformer default checkpoint glob pinned to the base `transformer_encoder_45k_171022_*` ensemble so task-finetuned checkpoints can't be silently averaged in; non-strict checkpoint loads now warn loudly on prediction-head key mismatches.
+- SpliceAI-PyTorch / OpenSpliceAI warn when the loaded ensemble isn't the canonical 5 models.
+
+### Packaging
+- Added the missing `py.typed` marker (PEP 561) so downstream type-checkers honor the inline types.
+
+_Splice predictions and `pair_classification` labels are unchanged from 3.2.0 for the SpliceAI-family and Pangolin engines._
+
 ## 3.2.0 — 2026-05-15
 
 ### Classifier redesign

@@ -85,6 +85,14 @@ class OpenSpliceAI(SplicingPredictor):
         cls._model_ensemble, cls._model_params = load_pytorch_models(
             model_dir, cls._model_device, cls._model_consts["SL"], 10000,
         )
+        if len(cls._model_ensemble) != 5:
+            import warnings
+            warnings.warn(
+                f"OpenSpliceAI expected a 5-model ensemble but loaded "
+                f"{len(cls._model_ensemble)} from {model_dir}; results will "
+                f"differ from the canonical 5-model average.",
+                RuntimeWarning, stacklevel=2,
+            )
 
     # ------------------------------------------------------------------
     def predict_one(self, sequence: str) -> SplicingPrediction:

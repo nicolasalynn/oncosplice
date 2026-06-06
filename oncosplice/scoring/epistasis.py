@@ -602,6 +602,7 @@ def summarize_residuals(site_residuals: pd.DataFrame) -> dict:
             "max_cryptic_rescue_residual":   0.0,
             "max_deletion_synergy_residual": 0.0,
             "max_cryptic_synergy_residual":  0.0,
+            "max_synergy_residual":          0.0,
             "max_abs_residual":    0.0,
             "max_abs_event_delta": 0.0,
             "pair_classification": "non-epistatic",
@@ -619,6 +620,11 @@ def summarize_residuals(site_residuals: pd.DataFrame) -> dict:
         "max_cryptic_rescue_residual":   _max_class_residual(site_residuals, "cryptic_rescue"),
         "max_deletion_synergy_residual": _max_class_residual(site_residuals, "deletion_synergy"),
         "max_cryptic_synergy_residual":  _max_class_residual(site_residuals, "cryptic_synergy"),
+        # combined synergy magnitude (consumed by result summaries)
+        "max_synergy_residual": max(
+            _max_class_residual(site_residuals, "deletion_synergy"),
+            _max_class_residual(site_residuals, "cryptic_synergy"),
+        ),
         "max_abs_residual":     float(site_residuals.residual.abs().max()),
         "max_abs_event_delta":  float(delta_event.max()),
         "pair_classification":  classify_pair(site_residuals),

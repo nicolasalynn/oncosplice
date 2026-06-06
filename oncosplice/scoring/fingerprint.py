@@ -17,7 +17,7 @@ Single variants::
 
 Double variants append a mechanism tag::
 
-    "D-1.A+1|rescue;res:1,ant:1"  outcome + 1 rescue site + 1 antagonistic site
+    "D-1.A+1|rescue;res:1,csyn:1" outcome + 1 rescue site + 1 cryptic-synergy site
     "_|non-epistatic"             no splicing change, no epistasis
 
 Use ``splicing_outcome_hash(result)`` to get a stable 16-char hex string
@@ -117,7 +117,7 @@ def splicing_outcome_fingerprint(
         :class:`~oncosplice.MultiVariantResult` — also supported).
     include_mechanism
         For double / multi results, append the pair-level classification
-        + per-class site counts (e.g. ``"|rescue;res:1,ant:1"``).
+        + per-class site counts (e.g. ``"|rescue;res:1,csyn:1"``).
     delta
         |Δprob| threshold for counting a site as lost/gained (default
         0.25, matches the residual threshold).
@@ -127,7 +127,7 @@ def splicing_outcome_fingerprint(
     Returns
     -------
     str
-        Format ``"D-2.A+1"`` (singles) or ``"D-2.A+1|rescue;res:1,ant:1"``
+        Format ``"D-2.A+1"`` (singles) or ``"D-2.A+1|rescue;res:1,csyn:1"``
         (doubles). Use ``"_"`` for "no significant change".
 
     Examples
@@ -149,11 +149,12 @@ def splicing_outcome_fingerprint(
             return outcome
         summary = getattr(result, "epistasis_summary", None) or {}
         cls = getattr(result, "pair_classification", "non-epistatic")
+        # 4-class taxonomy (matches summarize_residuals keys).
         mech_parts = []
-        if summary.get("n_syn"):      mech_parts.append(f"syn:{summary['n_syn']}")
-        if summary.get("n_rescue"):   mech_parts.append(f"res:{summary['n_rescue']}")
-        if summary.get("n_compound"): mech_parts.append(f"comp:{summary['n_compound']}")
-        if summary.get("n_ant"):      mech_parts.append(f"ant:{summary['n_ant']}")
+        if summary.get("n_del_syn"):     mech_parts.append(f"dsyn:{summary['n_del_syn']}")
+        if summary.get("n_cryp_syn"):    mech_parts.append(f"csyn:{summary['n_cryp_syn']}")
+        if summary.get("n_rescue"):      mech_parts.append(f"res:{summary['n_rescue']}")
+        if summary.get("n_cryp_rescue"): mech_parts.append(f"cres:{summary['n_cryp_rescue']}")
         mech_str = (cls + (";" + ",".join(mech_parts) if mech_parts else ""))
         return f"{outcome}|{mech_str}"
 

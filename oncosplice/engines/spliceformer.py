@@ -26,7 +26,10 @@ import numpy as np
 
 from .base import SplicingPrediction, SplicingPredictor
 
-_DEFAULT_GLOB = "transformer_encoder_45k_*"
+# Pin to the base 45k ensemble only. The upstream repo also ships task-finetuned
+# checkpoints (e.g. transformer_encoder_45k_finetune_rnasplice-blood_*); a looser
+# glob would silently average those into the general-purpose ensemble.
+_DEFAULT_GLOB = "transformer_encoder_45k_171022_*"
 
 _IN_MAP = np.asarray(
     [[0, 0, 0, 0],
@@ -129,10 +132,23 @@ class Spliceformer(SplicingPredictor):
             try:
                 m.load_state_dict(cleaned, strict=True)
             except RuntimeError:
-                # Some checkpoints may be slightly mismatched (e.g. a different
-                # policy head). Fall back to non-strict; the prediction head is
-                # what we need and survives a partial load.
-                m.load_state_dict(cleaned, strict=False)
+                # Some checkpoints carry an extra policy/value head the strict
+                # load rejects. Fall back to non-strict, but surface exactly what
+                # didn't match — a mismatch in the *prediction* head (conv_final
+                # / SpliceAI backbone) means garbage output, not a benign skip.
+                incompat = m.load_state_dict(cleaned, strict=False)
+                serious = [
+                    k for k in (list(incompat.missing_keys) + list(incompat.unexpected_keys))
+                    if not k.startswith("policy")
+                ]
+                if serious:
+                    import warnings
+                    warnings.warn(
+                        f"Spliceformer checkpoint {wp.name}: non-strict load with "
+                        f"prediction-head key mismatches {serious[:8]}"
+                        f"{'...' if len(serious) > 8 else ''} — output may be unreliable.",
+                        RuntimeWarning, stacklevel=2,
+                    )
             m.eval()
             models.append(m)
         if not models:

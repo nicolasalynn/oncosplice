@@ -1184,6 +1184,16 @@ class OncospliceEngine:
 
         scan_out = pd.concat(per_gene_results, ignore_index=True) if per_gene_results else pd.DataFrame()
 
+        # scan() can early-return an empty, column-less DataFrame (e.g. no
+        # parseable constructs, or an engine that produced no rows) WITHOUT
+        # raising — in which case it never went through the except branch above
+        # and carries no `construct_id`. Guard the merge so this surfaces as
+        # per-construct error rows instead of a KeyError / ambiguous-truth crash.
+        if "construct_id" not in scan_out.columns:
+            scan_out = pd.DataFrame({"construct_id": work["construct_id"].to_numpy()})
+            scan_out["engine"] = self.splicing_engine
+            scan_out["error"] = "scan() returned no output for these constructs"
+
         # 3. Re-join scan output back to the original DataFrame on construct_id
         merged = work.merge(scan_out, on="construct_id", how="left")
         merged = merged.set_index("_input_idx").reindex(df.index)

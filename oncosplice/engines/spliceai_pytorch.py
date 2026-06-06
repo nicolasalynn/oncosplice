@@ -205,6 +205,14 @@ class SpliceAIPyTorch(SplicingPredictor):
         device = self._pick_device()
 
         weight_files = sorted(Path(weights_dir).glob("*.pt"))
+        if len(weight_files) != 5:
+            import warnings
+            warnings.warn(
+                f"SpliceAI-PyTorch expected a 5-model ensemble but found "
+                f"{len(weight_files)} *.pt file(s) in {weights_dir}; results will "
+                f"differ from the canonical 5-model average.",
+                RuntimeWarning, stacklevel=2,
+            )
         models = []
         for f in weight_files:
             m = SpliceAI_ReLU(L, W, AR).to(device)
