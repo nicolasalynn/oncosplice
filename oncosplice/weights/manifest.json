@@ -1,74 +1,45 @@
 {
-  "_comment": "Mapping of model_name → download instructions. Populate the URLs once weights are hosted (e.g. HuggingFace, Zenodo, GCS). Each model's directory will be created under ~/.oncosplice/weights/<model_name>/. If `auto_unzip` is true (default) and the file is a .zip, it will be extracted in place.",
+  "_comment": "Model-weight metadata. Weights are hosted on the Hugging Face Hub repo set in oncosplice.weights.HF_REPO_ID (override with $ONCOSPLICE_HF_REPO), one sub-folder per model. `subfolder` defaults to the model name; set `repo_id` to override the repo for a single model. `license`/`attribution` document the provenance of the *trained weights* (the architecture code in oncosplice is independently MIT-licensed or vendored MIT).",
 
   "openspliceai": {
-    "description": "OpenSpliceAI (PyTorch port of SpliceAI) — 5-model ensemble, 10000nt MANE-trained weights. Default for the OpenSpliceAI predictor.",
+    "description": "OpenSpliceAI (PyTorch port of SpliceAI) — 5-model ensemble, 10000nt MANE-trained weights.",
+    "subfolder": "openspliceai",
     "source_paper": "https://doi.org/10.1101/2024.10.10.617692",
-    "files": [
-      {
-        "filename": "openspliceai-mane-10000nt.zip",
-        "url": "REPLACE_WITH_HOSTING_URL/openspliceai-mane-10000nt.zip"
-      }
-    ]
+    "license": "see upstream OpenSpliceAI",
+    "attribution": "OpenSpliceAI (Chao et al.)"
   },
 
   "spliceai_pytorch": {
-    "description": "SpliceAI weights translated Keras→PyTorch, loaded into the OpenSpliceAI architecture. Use this when you need numerical equivalence with the original Keras SpliceAI rather than OpenSpliceAI's separately-trained MANE weights.",
+    "description": "SpliceAI weights translated Keras→PyTorch, run in oncosplice's plain-ReLU SpliceAI architecture. Numerically equivalent to the original Keras SpliceAI.",
+    "subfolder": "spliceai_pytorch",
     "source_paper": "https://doi.org/10.1016/j.cell.2018.12.015",
-    "files": [
-      {
-        "filename": "spliceai-pytorch-translated.zip",
-        "url": "REPLACE_WITH_HOSTING_URL/spliceai-pytorch-translated.zip"
-      }
-    ]
+    "license": "see upstream SpliceAI (Illumina)",
+    "attribution": "SpliceAI weights © Jaganathan et al. 2019"
   },
 
   "spliceai_keras": {
-    "description": "SpliceAI original Keras/TF weights (Jaganathan et al. 2019) — 5-model ensemble.",
+    "description": "SpliceAI original Keras/TF weights (Jaganathan et al. 2019) — 5-model ensemble. Reference/verification only.",
+    "subfolder": "spliceai_keras",
     "source_paper": "https://doi.org/10.1016/j.cell.2018.12.015",
-    "files": [
-      {
-        "filename": "spliceai1.h5",
-        "url": "REPLACE_WITH_HOSTING_URL/spliceai1.h5"
-      },
-      {
-        "filename": "spliceai2.h5",
-        "url": "REPLACE_WITH_HOSTING_URL/spliceai2.h5"
-      },
-      {
-        "filename": "spliceai3.h5",
-        "url": "REPLACE_WITH_HOSTING_URL/spliceai3.h5"
-      },
-      {
-        "filename": "spliceai4.h5",
-        "url": "REPLACE_WITH_HOSTING_URL/spliceai4.h5"
-      },
-      {
-        "filename": "spliceai5.h5",
-        "url": "REPLACE_WITH_HOSTING_URL/spliceai5.h5"
-      }
-    ]
+    "license": "see upstream SpliceAI (Illumina)",
+    "attribution": "SpliceAI weights © Jaganathan et al. 2019"
   },
 
   "pangolin": {
-    "description": "Pangolin — 40 PyTorch models (8 indices × 5 ensemble members), multi-tissue GTEx-trained.",
+    "description": "Pangolin — 40 PyTorch models (8 indices × 5 ensemble members), multi-tissue GTEx-trained. Run via oncosplice's independent (MIT) re-implementation of the Pangolin architecture.",
+    "subfolder": "pangolin",
     "source_paper": "https://doi.org/10.1186/s13059-022-02664-4",
-    "files": [
-      {
-        "filename": "pangolin-models.zip",
-        "url": "REPLACE_WITH_HOSTING_URL/pangolin-models.zip"
-      }
-    ]
+    "license": "GPL-3.0 (trained weights, © Zeng & Li 2022)",
+    "attribution": "Pangolin weights © Zeng & Li 2022, GPL-3.0. The oncosplice architecture code is an independent MIT re-implementation; weights are redistributed for non-commercial research use under their original GPL-3.0 terms.",
+    "expected_files": "final.{j}.{i}.3 for i in 0..7, j in 1..5 (40 files)"
   },
 
   "spliceformer": {
-    "description": "Spliceformer — 40k-context transformer ensemble (Jónsson et al. Comms Bio 2024).",
+    "description": "Spliceformer — 40k-context transformer ensemble (Jónsson et al. Comms Bio 2024). Model definition is vendored (MIT) in oncosplice.",
+    "subfolder": "spliceformer",
     "source_paper": "https://doi.org/10.1038/s42003-024-07298-9",
-    "files": [
-      {
-        "filename": "spliceformer-encoder-40k.zip",
-        "url": "REPLACE_WITH_HOSTING_URL/spliceformer-encoder-40k.zip"
-      }
-    ]
+    "license": "MIT (© 2024 Benedikt Atli Jónsson)",
+    "attribution": "Spliceformer © 2024 Benedikt Atli Jónsson, MIT.",
+    "expected_files": "transformer_encoder_45k_* checkpoints"
   }
 }

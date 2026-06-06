@@ -1,29 +1,27 @@
 """Verify that the original SpliceAI Keras model and SpliceAI weights *translated*
-to the PyTorch architecture (loaded via OpenSpliceAI's model construct) produce
-numerically equivalent predictions on the same sequence.
+to PyTorch produce numerically equivalent predictions on the same sequence.
 
 What this test does NOT compare:
   - Keras SpliceAI vs. OpenSpliceAI's own MANE-trained weights (those are
-    different training runs and *will* differ).
+    different training runs and *will* differ — and loading the translated
+    weights into OpenSpliceAI's LeakyReLU architecture is also not equivalent).
 
 What this test DOES compare:
   - The five canonical SpliceAI .h5 Keras weights, run in TensorFlow.
-  - The same five SpliceAI weights translated to PyTorch state dicts and
-    loaded into the OpenSpliceAI PyTorch architecture.
+  - The same five SpliceAI weights translated to PyTorch state dicts and run in
+    oncosplice's plain-ReLU SpliceAI architecture (the ``SpliceAIPyTorch`` engine).
 
-Because the model architecture, layer order, and weight values are identical
-across the two framework runs, any non-zero difference is purely numerical
-(float32 BatchNorm epsilon, conv op ordering, etc.). We expect:
+Because the architecture, layer order, and weight values match across the two
+framework runs, any non-zero difference is purely numerical (float32 BatchNorm
+epsilon, conv op ordering, etc.). We expect:
 
 - Max absolute difference on acceptor/donor probabilities < ~5e-3
 - Mean absolute difference < ~1e-3
 
 To run this test you need both:
   1. SpliceAI installed (`pip install spliceai tensorflow`) with its .h5 weights.
-  2. A directory of PyTorch state-dicts translated from those .h5 files
-     (e.g. ~/.oncosplice/weights/spliceai_pytorch/), set via:
-         ONCOSPLICE_WEIGHTS_DIR=~/.oncosplice/weights
-     or passed explicitly to OpenSpliceAI(model_dir=...).
+  2. The translated PyTorch weights in the oncosplice cache
+     (`oncosplice-download-weights spliceai_pytorch`).
 
 The test skips cleanly if either backend is missing.
 """
@@ -67,24 +65,21 @@ def keras_predictor():
 
 @pytest.fixture(scope="module")
 def torch_predictor():
-    """OpenSpliceAI architecture loaded with the **Keras-translated** SpliceAI
-    weights — NOT OpenSpliceAI's own MANE-trained checkpoints. This is the
-    only comparison that should be numerically equivalent to Keras SpliceAI.
+    """The **Keras-translated** SpliceAI weights run in oncosplice's plain-ReLU
+    SpliceAI PyTorch architecture (the ``SpliceAIPyTorch`` engine). This is the
+    only comparison that is numerically equivalent to Keras SpliceAI — loading
+    these weights into OpenSpliceAI's *different* (LeakyReLU, MANE-trained)
+    architecture would not be.
     """
-    from oncosplice.engines import OpenSpliceAI
-    from oncosplice.weights import resolve_dir
+    from oncosplice.engines import SpliceAIPyTorch
 
-    # Look for the translated weights specifically (separate from openspliceai-mane).
-    translated_dir = resolve_dir("spliceai_pytorch")
-    if translated_dir is None:
+    p = SpliceAIPyTorch()
+    if not p.is_available():
         pytest.skip(
             "SpliceAI→PyTorch translated weights not present. "
             "Run `oncosplice-download-weights spliceai_pytorch` or "
             "place them in ~/.oncosplice/weights/spliceai_pytorch/."
         )
-    p = OpenSpliceAI(model_dir=str(translated_dir))
-    if not p.is_available():
-        pytest.skip("OpenSpliceAI backend not installed.")
     return p
 
 

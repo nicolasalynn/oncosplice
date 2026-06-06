@@ -57,6 +57,11 @@ classification core (`analyze_pair`, `scan`, `classify_dataframe`) has **no
 `geney` dependency** — `geney` is only needed for the protein-divergence score
 path (`[protein]` extra).
 
+**Model weights download automatically** from the [Hugging Face Hub](https://huggingface.co/nicolynnvila/oncosplice-weights)
+on first use and are cached in `~/.oncosplice/weights/` — no manual step. Set
+`ONCOSPLICE_AUTO_DOWNLOAD=0` to require an explicit `oncosplice-download-weights`
+instead (useful offline / in CI).
+
 ## Highlights
 
 - **Four production engines under one interface** — SpliceAI (PyTorch port,
@@ -111,7 +116,7 @@ out = eng.classify_dataframe(
     checkpoint_path="results.csv",
 )
 # adds: pair_classification, max_abs_residual, max_abs_event_delta,
-#       n_syn, n_rescue, n_compound, engine, error
+#       n_del_syn, n_cryp_syn, n_rescue, n_cryp_rescue, engine, error
 ```
 
 Per-gene grouping + batched `scan()` underneath — typically 10–40× faster than the per-pair path on TCGA-shaped datasets. The runner is resume-safe (re-running with the same checkpoint path skips already-done pairs) and emits both per-pair and per-single CSVs.

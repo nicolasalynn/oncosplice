@@ -10,14 +10,9 @@ architecture). It is *not* the same as :class:`OpenSpliceAI`:
   a plain-ReLU PyTorch architecture. Numerically equivalent to running the
   original Keras model (to within a few × 10⁻⁵), just on PyTorch.
 
-Weights expected at ``<weights_dir>/spliceai{1..5}_torch.pt`` (the bundle
-that ``convert_spliceai_to_pt.py`` produces from the upstream .h5 files).
-The resolver looks for these under:
-
-1. ``$ONCOSPLICE_WEIGHTS_DIR/spliceai_pytorch/``
-2. ``~/.oncosplice/weights/spliceai_pytorch/``
-3. ``<package>/weights/spliceai_pytorch/``
-4. ``<geney>/models/spliceai-original/10000nt/``  (the pre-existing install)
+Weights are ``spliceai{1..5}_torch.pt`` (the Keras→PyTorch translation),
+resolved via the central weight resolver: ``$ONCOSPLICE_WEIGHTS_DIR`` override →
+``~/.oncosplice/weights/spliceai_pytorch/`` cache → HuggingFace auto-download.
 """
 from __future__ import annotations
 
@@ -169,24 +164,9 @@ class SpliceAIPyTorch(SplicingPredictor):
     def _resolve_weights_dir(self) -> Path | None:
         if self._dir_override is not None and self._dir_override.exists():
             return self._dir_override
-        # Centralised resolver
         from ..weights import resolve_dir as _resolve
         d = _resolve("spliceai_pytorch")
-        if d is not None:
-            return Path(d)
-        # Geney's pre-existing translated weights
-        try:
-            import geney
-            d = Path(geney.__file__).parent / "models" / "spliceai-original" / "10000nt"
-            if d.exists() and any(d.glob("*.pt")):
-                return d
-        except ImportError:
-            pass
-        # Project-local conversion output
-        cand = Path.home() / "Downloads/all_paper2_code/models/spliceai-pt/10000nt"
-        if cand.exists() and any(cand.glob("*.pt")):
-            return cand
-        return None
+        return Path(d) if d is not None else None
 
     def _pick_device(self):
         import sys
@@ -210,14 +190,14 @@ class SpliceAIPyTorch(SplicingPredictor):
 
         import torch
         weights_dir = self._resolve_weights_dir()
+        if weights_dir is None and self._dir_override is None:
+            from ..weights import ensure_dir
+            weights_dir = ensure_dir("spliceai_pytorch")  # auto-downloads on a miss
         if weights_dir is None:
             raise RuntimeError(
-                "SpliceAI-PyTorch weights not found. Looked in "
-                "$ONCOSPLICE_WEIGHTS_DIR/spliceai_pytorch, "
-                "~/.oncosplice/weights/spliceai_pytorch, "
-                "<geney>/models/spliceai-original/10000nt, and "
-                "~/Downloads/all_paper2_code/models/spliceai-pt/10000nt. "
-                "Run convert_spliceai_to_pt.py or set the path explicitly."
+                "SpliceAI-PyTorch weights not found and could not be downloaded "
+                "from the Hub. Check network / HF access, or run "
+                "`oncosplice-download-weights spliceai_pytorch`."
             )
 
         SpliceAI_ReLU = _build_model_class()

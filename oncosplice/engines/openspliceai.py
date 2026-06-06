@@ -16,8 +16,6 @@ import io
 import sys
 from typing import List, Sequence
 
-import numpy as np
-
 from .base import SplicingPrediction, SplicingPredictor
 
 
@@ -54,25 +52,16 @@ class OpenSpliceAI(SplicingPredictor):
         if self._model_dir_override is not None:
             OpenSpliceAI._model_dir = str(self._model_dir_override)
             return OpenSpliceAI._model_dir
-        # Centralised resolver: oncosplice/weights → user cache → bundled
-        from ..weights import resolve_dir as _resolve
-        d = _resolve("openspliceai")
-        if d is not None:
-            OpenSpliceAI._model_dir = str(d)
-            return OpenSpliceAI._model_dir
-        # Fallback: ask geney for the same resolver
-        try:
-            from geney.splicing.engines import _get_openspliceai_model_dir as _gd
-        except ImportError:
-            try:
-                from geney.engines import _get_openspliceai_model_dir as _gd
-            except ImportError:
-                raise RuntimeError(
-                    "OpenSpliceAI weights not found. Run "
-                    "`oncosplice-download-weights openspliceai` or set "
-                    "ONCOSPLICE_WEIGHTS_DIR / OPENSPLICEAI_MODEL_DIR."
-                )
-        OpenSpliceAI._model_dir = _gd()
+        # env override → ~/.oncosplice cache → HuggingFace auto-download.
+        from ..weights import ensure_dir as _ensure
+        d = _ensure("openspliceai")
+        if d is None:
+            raise RuntimeError(
+                "OpenSpliceAI weights not found and could not be downloaded "
+                "from the Hub. Check network / HF access, or run "
+                "`oncosplice-download-weights openspliceai`."
+            )
+        OpenSpliceAI._model_dir = str(d)
         return OpenSpliceAI._model_dir
 
     # Class-level cache for the loaded model ensemble + device + consts.
@@ -90,7 +79,7 @@ class OpenSpliceAI(SplicingPredictor):
         if cls._model_ensemble is not None:
             return
         from openspliceai.predict import utils as _osa_utils
-        from openspliceai.predict.predict import setup_device, load_pytorch_models
+        from openspliceai.predict.predict import load_pytorch_models, setup_device
         cls._model_consts   = _osa_utils.initialize_constants(10000)
         cls._model_device   = setup_device()
         cls._model_ensemble, cls._model_params = load_pytorch_models(
