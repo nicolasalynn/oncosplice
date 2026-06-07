@@ -187,7 +187,8 @@ class OncospliceEngine:
     # ------------------------------------------------------------------
     # Splicing prediction — uniform across all contexts and engines
     # ------------------------------------------------------------------
-    def _make_padded_seq(self, ref_pre, center: int, mutations: Sequence[Tuple[int, str, str]]
+    def _make_padded_seq(self, ref_pre, center: int, mutations: Sequence[Tuple[int, str, str]],
+                         *, min_analysis_half: int = 0,
                         ) -> Tuple[str, np.ndarray]:
         """Apply mutations to a pre-mRNA clone, then build a padded ACGTN
         string and the genomic-position index for the biological (un-padded)
@@ -199,13 +200,25 @@ class OncospliceEngine:
         actually want predictions for on each side. Returns
         ``(padded_sequence, biological_indices)`` with
         ``len(biological_indices) == len(padded_sequence) - 2*cl``.
+
+        ``analysis_half`` always expands so that every mutation in ``mutations``
+        sits at least ``base_margin`` bp inside the biological window — otherwise
+        a mutation far from ``center`` would fall outside the predicted region
+        and silently produce a zero delta. ``min_analysis_half`` lets a caller
+        force a wider (shared) window so that the reference context and every
+        mutant context align position-for-position (required by ``scan`` /
+        ``analyze_pair`` / ``analyze_multi``, which compare ref vs mutant).
         """
         cl = self.predictor.context_length
-        # How wide a biological window to predict on each side of `center`.
-        # Match the legacy oncosplice 3.0.0 behaviour: ±(SPLICING_CONTEXT_BP − cl)
-        # for short-context models (SpliceAI/Pangolin: ±2500); for long-context
-        # models (Spliceformer: cl=20000) shrink to a sensible default.
-        analysis_half = max(SPLICING_CONTEXT_BP - cl, 250)
+        # Base biological half-window: ±(SPLICING_CONTEXT_BP − cl) for short-
+        # context models (SpliceAI/Pangolin: ±2500); a floor of 250 for long-
+        # context models (Spliceformer: cl=20000). This is the margin each
+        # mutation is guaranteed around itself (matches analyze_single).
+        base_margin = max(SPLICING_CONTEXT_BP - cl, 250)
+        analysis_half = max(base_margin, int(min_analysis_half))
+        if mutations:
+            span = max(abs(int(pos) - center) for pos, _, _ in mutations)
+            analysis_half = max(analysis_half, span + base_margin)
         full_half = cl + analysis_half
 
         t = ref_pre.clone()
@@ -237,12 +250,14 @@ class OncospliceEngine:
         biological_indices = indices[cl:-cl] if cl else indices
         return seq.upper(), biological_indices
 
-    def _predict_context(self, ref_pre, center: int, mutations: Sequence[Tuple[int, str, str]]
+    def _predict_context(self, ref_pre, center: int, mutations: Sequence[Tuple[int, str, str]],
+                         *, min_analysis_half: int = 0,
                          ) -> Tuple[pd.Series, pd.Series]:
         """Run the predictor for one context. Returns donor & acceptor Series
         indexed by genomic position.
         """
-        seq, idx = self._make_padded_seq(ref_pre, center, mutations)
+        seq, idx = self._make_padded_seq(ref_pre, center, mutations,
+                                         min_analysis_half=min_analysis_half)
         pred = self.predictor.predict(seq)
         if pred.length != len(idx):
             raise RuntimeError(
@@ -584,22 +599,30 @@ class OncospliceEngine:
 
         center = (min(v.pos for v in variants) + max(v.pos for v in variants)) // 2
         cl = self.predictor.context_length
-        window = max(cl, SPLICING_CONTEXT_BP)
+        # Shared biological half-window so ref + every mutant context align, and
+        # so variants far from the midpoint aren't cropped out (→ zero delta).
+        base_margin = max(SPLICING_CONTEXT_BP - cl, 250)
+        span_half = max(abs(v.pos - center) for v in variants)
+        min_half = span_half + base_margin
+        var_span = max(v.pos for v in variants) - min(v.pos for v in variants)
+        window = max(cl, SPLICING_CONTEXT_BP) + var_span
         ref, ref_pre = self._prepare_reference(
             gene, center, transcript_id,
             window_lo=center - window, window_hi=center + window,
         )
         ann_d, ann_a = self._annotated_sets(ref)
 
-        # Predictions: ref + each single + event
+        # Predictions: ref + each single + event (all on the shared window)
         context_preds: "dict[str, tuple[pd.Series, pd.Series]]" = {}
-        context_preds["ref"] = self._predict_context(ref_pre, center, mutations=[])
+        context_preds["ref"] = self._predict_context(
+            ref_pre, center, mutations=[], min_analysis_half=min_half)
         for i, v in enumerate(variants, start=1):
             context_preds[f"mut{i}"] = self._predict_context(
-                ref_pre, center, mutations=[(v.pos, v.ref, v.alt)],
+                ref_pre, center, mutations=[(v.pos, v.ref, v.alt)], min_analysis_half=min_half,
             )
         context_preds["event"] = self._predict_context(
             ref_pre, center, mutations=[(v.pos, v.ref, v.alt) for v in variants],
+            min_analysis_half=min_half,
         )
 
         site_table = self._assemble_site_table(context_preds, ann_d, ann_a)
@@ -781,6 +804,11 @@ class OncospliceEngine:
         all_positions = [v.pos for vs in all_vs for v in vs]
         center = (min(all_positions) + max(all_positions)) // 2
         cl = self.predictor.context_length
+        # Shared biological half-window covering every construct's mutations, so
+        # the single reference and all mutant sequences align position-for-
+        # position and no mutation far from `center` gets cropped to zero delta.
+        base_margin = max(SPLICING_CONTEXT_BP - cl, 250)
+        min_half = max(abs(p - center) for p in all_positions) + base_margin
         window = max(cl, SPLICING_CONTEXT_BP) + (max(all_positions) - min(all_positions))
         ref, ref_pre = self._prepare_reference(
             gene, center, transcript_id,
@@ -828,7 +856,8 @@ class OncospliceEngine:
         idxs: list[np.ndarray] = []
 
         def _add(mutations: Tuple[Tuple[int, str, str], ...], key):
-            seq, idx = self._make_padded_seq(ref_pre, center, list(mutations))
+            seq, idx = self._make_padded_seq(ref_pre, center, list(mutations),
+                                             min_analysis_half=min_half)
             seq_index[key] = len(seqs)
             seqs.append(seq); idxs.append(idx)
 

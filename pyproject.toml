@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "oncosplice"
-version = "3.2.1"
+version = "3.2.2"
 description = "Sequence-level pipeline for splicing-epistasis analysis of single, double, and N-variant constructs"
 readme = "README.md"
 requires-python = ">=3.10"

@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.2.2 — 2026-06-07
+
+### Fixed (correctness — important)
+- **Batched `scan()` / `classify_dataframe` zeroed out mutations far from the gene-wide batch midpoint.** The whole batch shared one `center` and predicted only ±2500 bp of biological window around it, so any construct whose mutations fell outside that window silently produced a **zero delta** (looked non-epistatic). On real gene-spanning cohorts this zeroed the majority of pairs. The biological window now expands to cover every construct's mutations (each mutation keeps the same ±margin `analyze_single` guarantees), and the reference + all mutant contexts share one aligned window. Batched results now match the per-pair `analyze_pair` path. The same latent bug in `analyze_pair`/`analyze_multi` for widely-separated variants is fixed too.
+- Near-center results are unchanged (bit-identical); only previously-zeroed distant mutations change (now correct).
+
 ## 3.2.1 — 2026-06-06
 
 ### Fixed (correctness)
